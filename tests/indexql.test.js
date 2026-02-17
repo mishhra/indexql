@@ -285,19 +285,19 @@ async function run() {
 
     // Test: add
     const rows1 = await numbers.select(["id", db.fn.add("value", 5)]).exec();
-    assert.equal(rows1[0]["add(value, 5)"], 15);
+    assert.equal(rows1[0]["value + 5"], 15);
 
     // Test: subtract
     const rows2 = await numbers.select(["id", db.fn.sub("value", 3)]).exec();
-    assert.equal(rows2[0]["sub(value, 3)"], 7);
+    assert.equal(rows2[0]["value - 3"], 7);
 
     // Test: multiply
     const rows3 = await numbers.select(["id", db.fn.mul("value", 2)]).exec();
-    assert.equal(rows3[0]["mul(value, 2)"], 20);
+    assert.equal(rows3[0]["value * 2"], 20);
 
     // Test: divide
     const rows4 = await numbers.select(["id", db.fn.div("value", 2)]).exec();
-    assert.equal(rows4[1]["div(value, 2)"], 10);
+    assert.equal(rows4[1]["value / 2"], 10);
 
     // Test: abs
     const rows5 = await numbers.select(["id", db.fn.abs("value")]).exec();
@@ -431,7 +431,7 @@ async function run() {
     const r8 = await db
       .sql("SELECT name, price * 0.9 FROM products WHERE id = 1")
       .exec();
-    assert.equal(r8[0]["mul(price, 0.9)"], 1080);
+    assert.equal(r8[0]["price * 0.9"], 1080);
 
     // Test: ABS() in SELECT
     const r9 = await db
@@ -493,6 +493,90 @@ async function run() {
       )
       .exec();
     assert.equal(r17[0].newname, "Laptop Air");
+  });
+
+  // Independent SELECT queries (no FROM clause)
+  await withDb(async (db) => {
+    // SELECT literal number
+    const r1 = await db.sql("SELECT 1").exec();
+    assert.equal(r1[0]["1"], 1);
+
+    // SELECT literal number with alias
+    const r2 = await db.sql("SELECT 1 as one").exec();
+    assert.equal(r2[0].one, 1);
+
+    // SELECT math expression
+    const r3 = await db.sql("SELECT 1 + 2 as sum").exec();
+    assert.equal(r3[0].sum, 3);
+
+    // SELECT math multiplication
+    const r4 = await db.sql("SELECT 6 * 7 as product").exec();
+    assert.equal(r4[0].product, 42);
+
+    // SELECT function with literals
+    const r5 = await db
+      .sql("SELECT UPPER('hello') as greeting")
+      .exec();
+    assert.equal(r5[0].greeting, "HELLO");
+
+    // SELECT CONCAT with literals
+    const r6 = await db
+      .sql("SELECT CONCAT('hello', ' ', 'world') as msg")
+      .exec();
+    assert.equal(r6[0].msg, "hello world");
+
+    // SELECT multiple expressions
+    const r7 = await db
+      .sql("SELECT 1 as a, 2 as b, 3 as c")
+      .exec();
+    assert.equal(r7[0].a, 1);
+    assert.equal(r7[0].b, 2);
+    assert.equal(r7[0].c, 3);
+  });
+
+  // Multiple SELECT queries (sqlMulti)
+  await withDb(async (db) => {
+    const products = db.table("products");
+    await products.insert([
+      { id: 1, name: "Laptop", price: 1200 },
+      { id: 2, name: "Phone", price: 800 },
+    ]).exec();
+
+    await db.table("users").insert([
+      { name: "Alice", email: "alice@test", age: 30, active: true },
+    ]).exec();
+
+    // Multi-query with newline separation
+    const results = await db.sqlMulti(
+      "SELECT * FROM products\nSELECT name FROM users"
+    );
+    assert.equal(results.length, 2);
+    assert.equal(results[0].error, null);
+    assert.equal(results[0].rows.length, 2);
+    assert.equal(results[1].error, null);
+    assert.equal(results[1].rows.length, 1);
+    assert.equal(results[1].rows[0].name, "Alice");
+
+    // Multi-query with semicolons
+    const results2 = await db.sqlMulti(
+      "SELECT name FROM products; SELECT 1 as one"
+    );
+    assert.equal(results2.length, 2);
+    assert.equal(results2[0].rows.length, 2);
+    assert.equal(results2[1].rows[0].one, 1);
+
+    // Single query through sqlMulti
+    const results3 = await db.sqlMulti("SELECT * FROM products");
+    assert.equal(results3.length, 1);
+    assert.equal(results3[0].rows.length, 2);
+
+    // Error in one query doesn't stop others
+    const results4 = await db.sqlMulti(
+      "SELECT * FROM products\nSELECT * FROM nonexistent_table"
+    );
+    assert.equal(results4.length, 2);
+    assert.equal(results4[0].error, null);
+    assert.ok(results4[1].error !== null);
   });
 }
 

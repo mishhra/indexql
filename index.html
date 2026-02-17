@@ -12,6 +12,19 @@
       rel="stylesheet"
       href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/theme/material.min.css"
     />
+    <link
+      rel="preconnect"
+      href="https://fonts.googleapis.com"
+    />
+    <link
+      rel="preconnect"
+      href="https://fonts.gstatic.com"
+      crossorigin
+    />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Geist+Mono:wght@400;500;600;700&family=Inter:wght@400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
     <style>
       * {
         margin: 0;
@@ -20,11 +33,42 @@
       }
 
       body {
-        font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        background: #0f0f10;
         min-height: 100vh;
-        padding: 20px;
-        color: #333;
+        padding: 16px;
+        color: #e4e4e7;
+      }
+
+      .app-header {
+        max-width: 1600px;
+        margin: 0 auto 12px;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+      }
+
+      .app-header h1 {
+        font-size: 18px;
+        font-weight: 700;
+        letter-spacing: -0.02em;
+        color: #fafafa;
+      }
+
+      .app-header h1 span {
+        color: #a78bfa;
+      }
+
+      .app-header .badge {
+        font-size: 10px;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        padding: 2px 8px;
+        border-radius: 9999px;
+        background: rgba(167, 139, 250, 0.15);
+        color: #a78bfa;
+        border: 1px solid rgba(167, 139, 250, 0.25);
       }
 
       .container {
@@ -32,25 +76,82 @@
         margin: 0 auto;
         display: grid;
         grid-template-columns: 1fr 1fr;
-        gap: 20px;
-        height: 90vh;
+        gap: 12px;
+        height: calc(100vh - 80px);
       }
 
       .panel {
-        background: white;
-        border-radius: 8px;
-        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+        background: #18181b;
+        border-radius: 12px;
+        border: 1px solid #27272a;
         display: flex;
         flex-direction: column;
         overflow: hidden;
       }
 
       .header {
-        background: #f8f9fa;
-        padding: 15px;
-        border-bottom: 1px solid #e0e0e0;
+        padding: 12px 16px;
+        border-bottom: 1px solid #27272a;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+        flex-shrink: 0;
+      }
+
+      .header-left {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+
+      .header-dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        flex-shrink: 0;
+      }
+
+      .header-dot.green { background: #22c55e; }
+      .header-dot.blue { background: #60a5fa; }
+
+      .header-title {
+        font-size: 13px;
         font-weight: 600;
-        color: #667eea;
+        color: #a1a1aa;
+        letter-spacing: 0.01em;
+      }
+
+      .header-actions {
+        display: flex;
+        gap: 6px;
+      }
+
+      .icon-btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 30px;
+        height: 30px;
+        border-radius: 6px;
+        border: 1px solid #27272a;
+        background: transparent;
+        color: #71717a;
+        cursor: pointer;
+        font-size: 14px;
+        transition: all 0.15s ease;
+      }
+
+      .icon-btn:hover {
+        background: #27272a;
+        color: #e4e4e7;
+        border-color: #3f3f46;
+      }
+
+      .icon-btn.danger:hover {
+        background: rgba(239, 68, 68, 0.1);
+        color: #ef4444;
+        border-color: rgba(239, 68, 68, 0.3);
       }
 
       .code-editor {
@@ -60,77 +161,161 @@
 
       .CodeMirror {
         height: 100% !important;
-        font-family: "Courier New", monospace !important;
+        font-family: "Geist Mono", "Fira Code", "JetBrains Mono", "Cascadia Code", monospace !important;
+        font-size: 13px !important;
+        line-height: 1.6 !important;
+        background: #18181b !important;
+      }
+
+      .CodeMirror-gutters {
+        background: #18181b !important;
+        border-right: 1px solid #27272a !important;
+      }
+
+      .CodeMirror-linenumber {
+        color: #3f3f46 !important;
       }
 
       .controls {
-        padding: 15px;
-        border-bottom: 1px solid #e0e0e0;
-        display: grid;
-        grid-template-columns: 1fr 1fr auto;
-        gap: 10px;
+        padding: 10px 16px;
+        border-top: 1px solid #27272a;
+        display: flex;
+        gap: 8px;
         align-items: center;
+        flex-shrink: 0;
       }
 
-      .controls select,
-      .controls button {
-        padding: 8px 12px;
-        border: 1px solid #ddd;
-        border-radius: 4px;
-        font-size: 14px;
+      .controls select {
+        padding: 7px 10px;
+        border: 1px solid #27272a;
+        border-radius: 6px;
+        font-size: 12px;
+        font-family: "Inter", sans-serif;
         cursor: pointer;
-        background: white;
+        background: #09090b;
+        color: #a1a1aa;
+        min-width: 0;
+        flex: 1;
       }
 
-      .controls button {
-        background: #667eea;
-        color: white;
-        border: none;
+      .controls select:hover {
+        border-color: #3f3f46;
+        color: #e4e4e7;
+      }
+
+      .btn {
+        padding: 7px 14px;
+        border-radius: 6px;
+        font-size: 12px;
         font-weight: 600;
-        transition: background 0.3s;
+        font-family: "Inter", sans-serif;
+        cursor: pointer;
+        border: 1px solid transparent;
+        transition: all 0.15s ease;
+        white-space: nowrap;
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
       }
 
-      .controls button:hover {
-        background: #764ba2;
+      .btn-primary {
+        background: #a78bfa;
+        color: #09090b;
+        border-color: #a78bfa;
       }
 
-      .controls button:disabled {
-        background: #ccc;
+      .btn-primary:hover {
+        background: #8b5cf6;
+        border-color: #8b5cf6;
+      }
+
+      .btn-primary:disabled {
+        background: #3f3f46;
+        color: #71717a;
+        border-color: #3f3f46;
         cursor: not-allowed;
+      }
+
+      .btn-secondary {
+        background: transparent;
+        color: #a1a1aa;
+        border-color: #27272a;
+      }
+
+      .btn-secondary:hover {
+        background: #27272a;
+        color: #e4e4e7;
+        border-color: #3f3f46;
+      }
+
+      .btn-ghost {
+        background: transparent;
+        color: #71717a;
+        border: none;
+        padding: 7px 10px;
+      }
+
+      .btn-ghost:hover {
+        color: #e4e4e7;
+        background: #27272a;
       }
 
       .output-section {
         display: flex;
         flex-direction: column;
-        height: 100%;
+        flex: 1;
+        overflow: hidden;
       }
 
       .output {
         flex: 1;
         overflow: auto;
-        padding: 15px;
+        padding: 12px 16px;
+      }
+
+      .output::-webkit-scrollbar {
+        width: 6px;
+      }
+
+      .output::-webkit-scrollbar-track {
+        background: transparent;
+      }
+
+      .output::-webkit-scrollbar-thumb {
+        background: #27272a;
+        border-radius: 3px;
       }
 
       .output-item {
-        margin-bottom: 15px;
-        padding: 10px;
-        background: #f5f5f5;
-        border-left: 4px solid #667eea;
-        border-radius: 4px;
-        font-family: "Courier New", monospace;
+        margin-bottom: 10px;
+        padding: 12px 14px;
+        border-radius: 8px;
+        font-family: "Geist Mono", "Fira Code", monospace;
         font-size: 12px;
-        max-height: 400px;
-        overflow: auto;
+        line-height: 1.5;
+        border: 1px solid;
       }
 
       .output-item.error {
-        border-left-color: #d73a49;
-        background: #fdeaea;
+        border-color: rgba(239, 68, 68, 0.25);
+        background: rgba(239, 68, 68, 0.06);
+        color: #fca5a5;
       }
 
       .output-item.success {
-        border-left-color: #28a745;
-        background: #eafde9;
+        border-color: rgba(34, 197, 94, 0.2);
+        background: rgba(34, 197, 94, 0.04);
+        color: #d4d4d8;
+      }
+
+      .output-item .query-label {
+        display: block;
+        font-size: 11px;
+        color: #71717a;
+        margin-bottom: 6px;
+        padding-bottom: 6px;
+        border-bottom: 1px solid #27272a;
+        font-weight: 500;
       }
 
       .output-item pre {
@@ -139,18 +324,144 @@
         word-wrap: break-word;
       }
 
-      .status {
-        padding: 10px 15px;
-        background: #f0f0f0;
-        border-top: 1px solid #e0e0e0;
-        font-size: 12px;
-        color: #666;
+      .output-item.collapsible .output-content {
+        position: relative;
+      }
+
+      .output-item.collapsible.collapsed .output-content {
+        max-height: 200px;
+        overflow: hidden;
+      }
+
+      .output-item.collapsible.collapsed .output-content::after {
+        content: '';
+        position: absolute;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        height: 60px;
+        background: linear-gradient(to bottom, transparent, rgba(34, 197, 94, 0.04));
+        pointer-events: none;
+      }
+
+      .output-item.collapsible.collapsed.error .output-content::after {
+        background: linear-gradient(to bottom, transparent, rgba(239, 68, 68, 0.06));
+      }
+
+      .collapse-toggle {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        margin-top: 8px;
+        padding: 4px 10px;
+        font-size: 11px;
+        font-family: "Inter", sans-serif;
+        font-weight: 500;
+        color: #71717a;
+        background: rgba(255, 255, 255, 0.03);
+        border: 1px solid #27272a;
+        border-radius: 5px;
+        cursor: pointer;
+        transition: all 0.15s ease;
+        width: fit-content;
+      }
+
+      .collapse-toggle:hover {
+        color: #a1a1aa;
+        background: rgba(255, 255, 255, 0.06);
+        border-color: #3f3f46;
+      }
+
+      .collapse-toggle .chevron {
+        display: inline-block;
+        transition: transform 0.2s ease;
+        font-size: 10px;
+      }
+
+      .collapsed .collapse-toggle .chevron {
+        transform: rotate(-90deg);
+      }
+
+      .collapse-toggle.top {
+        margin-top: 0;
+        margin-bottom: 8px;
+      }
+
+      .collapsible.collapsed .collapse-toggle.top {
+        display: none;
+      }
+
+      .row-count-badge {
+        font-size: 10px;
+        font-weight: 600;
+        padding: 1px 6px;
+        border-radius: 9999px;
+        background: rgba(167, 139, 250, 0.12);
+        color: #a78bfa;
+        border: 1px solid rgba(167, 139, 250, 0.2);
+        margin-left: auto;
+      }
+
+      .output-item .output-header {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin-bottom: 6px;
+        padding-bottom: 6px;
+        border-bottom: 1px solid #27272a;
+      }
+
+      .status-bar {
+        padding: 8px 16px;
+        border-top: 1px solid #27272a;
+        font-size: 11px;
+        color: #52525b;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        flex-shrink: 0;
+      }
+
+      .status-bar .dot {
+        width: 6px;
+        height: 6px;
+        border-radius: 50%;
+        background: #22c55e;
+        flex-shrink: 0;
       }
 
       .seed-info {
-        font-size: 12px;
-        color: #666;
-        margin-bottom: 10px;
+        font-size: 11px;
+        color: #52525b;
+        padding: 6px 16px;
+      }
+
+      .kbd {
+        display: inline-block;
+        padding: 1px 5px;
+        font-family: "Geist Mono", monospace;
+        font-size: 10px;
+        color: #71717a;
+        background: #27272a;
+        border: 1px solid #3f3f46;
+        border-radius: 4px;
+        line-height: 1.4;
+      }
+
+      .empty-state {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        height: 100%;
+        color: #3f3f46;
+        font-size: 13px;
+        gap: 8px;
+      }
+
+      .empty-state .icon {
+        font-size: 28px;
+        opacity: 0.5;
       }
 
       @media (max-width: 1200px) {
@@ -166,45 +477,72 @@
     </style>
   </head>
   <body>
+    <div class="app-header">
+      <h1>Index<span>QL</span></h1>
+      <span class="badge">Playground</span>
+    </div>
+
     <div class="container">
       <!-- Editor Panel -->
       <div class="panel">
-        <div class="header">📝 SQL Query Editor</div>
+        <div class="header">
+          <div class="header-left">
+            <div class="header-dot green"></div>
+            <span class="header-title">Query Editor</span>
+          </div>
+          <div class="header-actions">
+            <button id="clearEditorBtn" class="icon-btn danger" title="Clear editor">&#x2715;</button>
+          </div>
+        </div>
         <div class="code-editor">
           <textarea id="sqlInput"></textarea>
         </div>
         <div class="controls">
           <select id="sampleQueries">
-            <option value="">Sample Queries</option>
+            <option value="">Load example...</option>
             <option value="basic-select">Basic Select</option>
-            <option value="with-where">Select with Where</option>
-            <option value="with-order">Order By & Limit</option>
-            <option value="aggregate">Aggregates & GroupBy</option>
-            <option value="join">Join</option>
-            <option value="complex">Complex Query</option>
+            <option value="with-where">Where Clause</option>
+            <option value="with-order">Order &amp; Limit</option>
+            <option value="aggregate">Aggregates</option>
+            <option value="join">Joins</option>
+            <option value="functions">Functions</option>
+            <option value="independent">Independent Select</option>
+            <option value="multi">Multi-Query</option>
           </select>
-          <button id="runBtn">▶ Run Query</button>
-          <button id="clearBtn">🗑️ Clear</button>
+          <button id="runBtn" class="btn btn-primary">&#9654; Run <span class="kbd">Ctrl+Enter</span></button>
         </div>
       </div>
 
       <!-- Output Panel -->
       <div class="panel">
-        <div class="header">📊 Results & Database</div>
-        <div class="controls">
-          <select id="dbSelect">
-            <option value="users">Users Table</option>
-            <option value="products">Products Table</option>
-            <option value="posts">Posts Table</option>
-            <option value="todos">Todos Table</option>
-          </select>
-          <button id="seedBtn">🌱 Seed Dummy Data</button>
-          <button id="countBtn">📈 Count Rows</button>
+        <div class="header">
+          <div class="header-left">
+            <div class="header-dot blue"></div>
+            <span class="header-title">Results</span>
+          </div>
+          <div class="header-actions">
+            <button id="clearOutputBtn" class="icon-btn danger" title="Clear results">&#x2715;</button>
+          </div>
         </div>
         <div class="output-section">
+          <div class="controls" style="border-top: none; border-bottom: 1px solid #27272a;">
+            <select id="dbSelect">
+              <option value="users">users</option>
+              <option value="products">products</option>
+              <option value="posts">posts</option>
+              <option value="todos">todos</option>
+            </select>
+            <button id="seedBtn" class="btn btn-secondary">&#127793; Seed</button>
+            <button id="countBtn" class="btn btn-ghost">&#9776; Count</button>
+          </div>
           <div id="seedInfo" class="seed-info"></div>
-          <div id="output" class="output"></div>
-          <div id="status" class="status">Ready</div>
+          <div id="output" class="output">
+            <div class="empty-state">
+              <div class="icon">&#x276F;</div>
+              <div>Run a query to see results</div>
+            </div>
+          </div>
+          <div id="status" class="status-bar"><span class="dot"></span> Ready</div>
         </div>
       </div>
     </div>
@@ -217,15 +555,19 @@
       let editor = null;
 
       const SAMPLE_QUERIES = {
-        "basic-select": "select id, name from users limit 5",
+        "basic-select": "SELECT id, name FROM users LIMIT 5",
         "with-where":
-          "select id, name, email from users where id >= 1 and id <= 10",
-        "with-order": "select id, name from users order by name asc limit 5",
+          "SELECT id, name, email FROM users WHERE id >= 1 AND id <= 10",
+        "with-order": "SELECT id, name FROM users ORDER BY name ASC LIMIT 5",
         aggregate:
-          "select title, count(*) as count from posts group by title limit 5",
-        join: "select users.firstName, posts.title from posts join users on posts.userId = users.id limit 5",
-        complex:
-          "select users.firstName, count(posts.id) as post_count from posts join users on posts.userId = users.id group by users.name order by post_count desc limit 5",
+          "SELECT title, COUNT(*) AS count FROM posts GROUP BY title LIMIT 5",
+        join: "SELECT users.firstName, posts.title FROM posts JOIN users ON posts.userId = users.id LIMIT 5",
+        functions:
+          "SELECT name, UPPER(name) AS upper_name, LENGTH(name) AS len\nFROM products\nLIMIT 5",
+        independent:
+          "SELECT 1 AS one, 2 + 3 AS sum, UPPER('hello') AS greeting",
+        multi:
+          "SELECT * FROM users LIMIT 3\nSELECT name, price FROM products LIMIT 3",
       };
 
       async function initDb() {
@@ -251,29 +593,82 @@
         };
 
         db = await IndexQL.open("playground", schema);
-        updateStatus("Database initialized");
+        updateStatus("Connected");
         updateSeedInfo("");
       }
 
       function updateStatus(msg) {
-        document.getElementById("status").textContent = msg;
+        document.getElementById("status").innerHTML = '<span class="dot"></span> ' + escapeHtml(msg);
       }
 
-      function updateOutput(msg, isError = false) {
-        const output = document.getElementById("output");
-        const item = document.createElement("div");
-        item.className = `output-item ${isError ? "error" : "success"}`;
+      const COLLAPSE_LINE_THRESHOLD = 12;
 
-        // Escape HTML and convert newlines to <br> tags
-        const escaped = escapeHtml(msg).replace(/\n/g, "<br>");
-        item.innerHTML = `<pre>${escaped}</pre>`;
+      function appendOutput(msg, isError = false, queryLabel = null, rowCount = null) {
+        const output = document.getElementById("output");
+        // Remove empty state if present
+        const emptyState = output.querySelector(".empty-state");
+        if (emptyState) emptyState.remove();
+
+        const lineCount = msg.split("\n").length;
+        const isLong = lineCount > COLLAPSE_LINE_THRESHOLD;
+
+        const item = document.createElement("div");
+        item.className = "output-item " + (isError ? "error" : "success");
+        if (isLong) {
+          item.classList.add("collapsible", "collapsed");
+        }
+
+        let html = "";
+
+        // Header row with query label and/or row count
+        if (queryLabel || (rowCount !== null && rowCount > 0)) {
+          html += '<div class="output-header">';
+          if (queryLabel) {
+            html += '<span class="query-label" style="margin:0;padding:0;border:0;">' + escapeHtml(queryLabel) + "</span>";
+          }
+          if (rowCount !== null && rowCount > 0) {
+            html += '<span class="row-count-badge">' + rowCount + " row" + (rowCount !== 1 ? "s" : "") + "</span>";
+          }
+          html += "</div>";
+        }
+
+        if (isLong) {
+          html += '<button class="collapse-toggle top" onclick="toggleCollapse(this)">';
+          html += '<span class="chevron">&#x25BC;</span> Collapse';
+          html += '</button>';
+        }
+
+        html += '<div class="output-content"><pre>' + escapeHtml(msg) + "</pre></div>";
+
+        if (isLong) {
+          html += '<button class="collapse-toggle bottom" onclick="toggleCollapse(this)">';
+          html += '<span class="chevron">&#x25BC;</span> Show all ' + lineCount + ' lines';
+          html += '</button>';
+        }
+
+        item.innerHTML = html;
 
         output.appendChild(item);
         output.scrollTop = output.scrollHeight;
       }
 
+      function toggleCollapse(btn) {
+        const item = btn.closest(".output-item");
+        const isCollapsed = item.classList.toggle("collapsed");
+        const lineCount = item.querySelector("pre").textContent.split("\n").length;
+        const buttons = item.querySelectorAll(".collapse-toggle");
+        buttons.forEach(function(b) {
+          if (isCollapsed) {
+            b.innerHTML = '<span class="chevron">&#x25BC;</span> Show all ' + lineCount + ' lines';
+          } else {
+            b.innerHTML = '<span class="chevron">&#x25BC;</span> Collapse';
+          }
+        });
+      }
+
       function clearOutput() {
-        document.getElementById("output").innerHTML = "";
+        document.getElementById("output").innerHTML =
+          '<div class="empty-state"><div class="icon">&#x276F;</div><div>Run a query to see results</div></div>';
       }
 
       function updateSeedInfo(msg) {
@@ -291,50 +686,93 @@
         .addEventListener("change", (e) => {
           if (e.target.value) {
             editor.setValue(SAMPLE_QUERIES[e.target.value]);
+            e.target.value = "";
           }
         });
 
       document.getElementById("runBtn").addEventListener("click", async () => {
         if (!db) {
-          updateOutput("Database not initialized", true);
+          appendOutput("Database not initialized", true);
           return;
         }
 
         const query = editor.getValue().trim();
         if (!query) {
-          updateOutput("Please enter a query", true);
+          appendOutput("Please enter a query", true);
           return;
         }
 
+        // Clear previous results
+        clearOutput();
+
         try {
-          updateStatus("Running query...");
-          const result = await db.sql(query).exec();
-          clearOutput();
-          if (result.length === 0) {
-            updateOutput("No rows returned", false);
+          updateStatus("Running...");
+
+          // Use sqlMulti to handle single or multiple queries
+          const results = await db.sqlMulti(query);
+
+          if (results.length === 1) {
+            // Single query — show directly
+            const r = results[0];
+            if (r.error) {
+              appendOutput(formatError(r.error), true);
+              updateStatus("Query failed");
+            } else if (r.rows.length === 0) {
+              appendOutput("No rows returned", false);
+              updateStatus("0 rows");
+            } else {
+              appendOutput(JSON.stringify(r.rows, null, 2), false, null, r.rows.length);
+              updateStatus(r.rows.length + " row" + (r.rows.length !== 1 ? "s" : ""));
+            }
           } else {
-            updateOutput(JSON.stringify(result, null, 2), false);
+            // Multiple queries — show each with its query label
+            let totalRows = 0;
+            let failed = 0;
+            for (const r of results) {
+              if (r.error) {
+                appendOutput(formatError(r.error), true, r.query);
+                failed++;
+              } else if (r.rows.length === 0) {
+                appendOutput("No rows returned", false, r.query);
+              } else {
+                appendOutput(JSON.stringify(r.rows, null, 2), false, r.query, r.rows.length);
+                totalRows += r.rows.length;
+              }
+            }
+            const parts = [];
+            parts.push(results.length + " queries");
+            parts.push(totalRows + " total rows");
+            if (failed > 0) parts.push(failed + " failed");
+            updateStatus(parts.join(" \u00b7 "));
           }
-          updateStatus(`Query executed: ${result.length} rows`);
         } catch (err) {
-          let errorMsg = err.message;
-          if (err.message && err.message.includes("match")) {
-            errorMsg = `Syntax Error: ${err.message}\n\nCheck your SELECT query syntax. Examples:\n- SELECT * FROM users\n- SELECT id, name FROM users WHERE age > 18\n- SELECT TOP 10 * FROM products SKIP 5`;
-          }
-          updateOutput(errorMsg, true);
-          updateStatus("Query failed");
+          appendOutput(formatError(err.message), true);
+          updateStatus("Failed");
         }
       });
 
-      document.getElementById("clearBtn").addEventListener("click", () => {
+      function formatError(msg) {
+        if (msg && msg.includes("match")) {
+          return "Syntax Error: " + msg + "\n\nCheck your query syntax. Examples:\n  SELECT * FROM users\n  SELECT 1 + 2 AS sum\n  SELECT UPPER('hello')";
+        }
+        return msg;
+      }
+
+      // Clear editor only
+      document.getElementById("clearEditorBtn").addEventListener("click", () => {
         editor.setValue("");
+        editor.focus();
+      });
+
+      // Clear results only
+      document.getElementById("clearOutputBtn").addEventListener("click", () => {
         clearOutput();
         updateStatus("Cleared");
       });
 
       document.getElementById("seedBtn").addEventListener("click", async () => {
         if (!db) {
-          updateOutput("Database not initialized", true);
+          appendOutput("Database not initialized", true);
           return;
         }
 
@@ -347,7 +785,7 @@
         };
 
         try {
-          updateStatus("Seeding dummy data...");
+          updateStatus("Seeding...");
           const resource = resourceMap[table];
           const seeded = await db.populateDummy({
             resources: [resource],
@@ -356,13 +794,13 @@
 
           const count = seeded[resource] || 0;
           clearOutput();
-          updateOutput(`Seeded ${count} rows into ${table}`, false);
+          appendOutput("Seeded " + count + " rows into " + table, false);
           updateSeedInfo(
-            `Last seeded: ${table} (${count} rows) · ${new Date().toLocaleTimeString()}`,
+            "Last seeded: " + table + " (" + count + " rows) \u00b7 " + new Date().toLocaleTimeString(),
           );
-          updateStatus("Seeding complete");
+          updateStatus("Seeded " + count + " rows");
         } catch (err) {
-          updateOutput(err.message, true);
+          appendOutput(err.message, true);
           updateStatus("Seeding failed");
         }
       });
@@ -371,25 +809,24 @@
         .getElementById("countBtn")
         .addEventListener("click", async () => {
           if (!db) {
-            updateOutput("Database not initialized", true);
+            appendOutput("Database not initialized", true);
             return;
           }
 
           const table = document.getElementById("dbSelect").value;
           try {
-            updateStatus("Counting rows...");
+            updateStatus("Counting...");
             const result = await db.table(table).select(null).exec();
             clearOutput();
-            updateOutput(`${result.length} rows in ${table}`, false);
-            updateStatus(`Count: ${result.length} rows`);
+            appendOutput(result.length + " rows in " + table, false);
+            updateStatus(result.length + " rows");
           } catch (err) {
-            updateOutput(err.message, true);
+            appendOutput(err.message, true);
             updateStatus("Count failed");
           }
         });
 
       window.addEventListener("load", () => {
-        // Initialize CodeMirror
         editor = CodeMirror.fromTextArea(document.getElementById("sqlInput"), {
           lineNumbers: true,
           mode: "text/x-sql",
@@ -398,10 +835,10 @@
           lineWrapping: true,
           autofocus: true,
           extraKeys: {
-            "Ctrl-Enter": async () => {
+            "Ctrl-Enter": () => {
               document.getElementById("runBtn").click();
             },
-            "Cmd-Enter": async () => {
+            "Cmd-Enter": () => {
               document.getElementById("runBtn").click();
             },
           },

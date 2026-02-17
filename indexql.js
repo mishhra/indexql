@@ -35,6 +35,10 @@ class IndexQL {
     return parseSql(this, query);
   }
 
+  async sqlMulti(query) {
+    return parseAndRunMultiSql(this, query);
+  }
+
   cols(tableName) {
     if (!this._schema.tables[tableName]) {
       throw new Error("Unknown table: " + tableName);
@@ -113,6 +117,10 @@ class TxContext {
 
   sql(query) {
     return parseSql(this, query);
+  }
+
+  async sqlMulti(query) {
+    return parseAndRunMultiSql(this, query);
   }
 
   cols(tableName) {
@@ -774,12 +782,26 @@ function projectFields(row, fields) {
 }
 
 function serializeFunc(func) {
-  if (func.type === "math" || func.type === "string") {
-    const args = func.args
-      .map((arg) => (typeof arg === "string" ? arg : JSON.stringify(arg)))
-      .join(", ");
-    return `${func.op}(${args})`;
+  const serializeArg = (arg) => {
+    if (arg && arg.__func) return serializeFunc(arg);
+    if (typeof arg === "string") return arg;
+    if (arg === undefined || arg === null) return "";
+    return String(arg);
+  };
+
+  if (func.type === "math") {
+    const infixMap = { add: "+", sub: "-", mul: "*", div: "/", mod: "%" };
+    const sym = infixMap[func.op];
+    if (sym && func.args.length === 2) {
+      return serializeArg(func.args[0]) + " " + sym + " " + serializeArg(func.args[1]);
+    }
+    return func.op + "(" + func.args.map(serializeArg).join(", ") + ")";
   }
+
+  if (func.type === "string") {
+    return func.op + "(" + func.args.map(serializeArg).join(", ") + ")";
+  }
+
   return JSON.stringify(func);
 }
 
@@ -799,8 +821,12 @@ function evaluateMathFunc(row, func) {
   // If the argument is a function, evaluate it first
   if (value && value.__func) {
     value = evaluateFunc(row, value);
+  } else if (typeof value === "number") {
+    // Already a numeric literal, use as-is
   } else {
-    value = resolveField(row, value);
+    const resolved = resolveField(row, value);
+    // If field not found, try as a numeric literal
+    value = resolved !== undefined ? resolved : Number(value);
   }
 
   if (value === undefined || value === null) return undefined;
@@ -1354,12 +1380,104 @@ async function runDelete(store, where) {
   return count;
 }
 
+// Evaluates independent SELECT expressions (no FROM clause)
+// e.g. SELECT 1, SELECT 1 + 2, SELECT CONCAT('hello', ' ', 'world')
+class IndependentQueryBuilder {
+  constructor(selectList) {
+    this._selectList = selectList;
+  }
+
+  async exec() {
+    const items = splitCsv(this._selectList);
+    const row = {};
+    for (const item of items) {
+      const trimmed = item.trim();
+      // Check for alias: expr AS alias
+      const aliasMatch = trimmed.match(/^(.+?)\s+as\s+([a-zA-Z0-9_]+)$/i);
+      const rawExpr = aliasMatch ? aliasMatch[1].trim() : trimmed;
+      const alias = aliasMatch ? aliasMatch[2].trim() : null;
+
+      const parsed = parseSqlExpression(rawExpr);
+      if (parsed && parsed.__func) {
+        const key = alias || serializeFunc(parsed);
+        row[key] = evaluateFunc({}, parsed);
+      } else {
+        // Could be a number literal, string literal, or plain value
+        const num = Number(parsed);
+        const key = alias || String(parsed);
+        if (!isNaN(num) && String(parsed).trim() !== "") {
+          row[key] = num;
+        } else {
+          // Check if it's a quoted string
+          const strMatch = String(parsed).match(/^['"](.*)['"]/s);
+          if (strMatch) {
+            row[key] = strMatch[1];
+          } else {
+            row[key] = parsed;
+          }
+        }
+      }
+    }
+    return [row];
+  }
+}
+
+// Split SQL text into multiple queries and run each one
+async function parseAndRunMultiSql(dbOrTx, sql) {
+  if (!sql || typeof sql !== "string") {
+    throw new Error("sqlMulti(query) requires a SQL string");
+  }
+
+  const queries = splitSqlQueries(sql);
+  const results = [];
+  for (const query of queries) {
+    try {
+      const qb = parseSql(dbOrTx, query);
+      const rows = await qb.exec();
+      results.push({ query, rows, error: null });
+    } catch (err) {
+      results.push({ query, rows: null, error: err.message });
+    }
+  }
+  return results;
+}
+
+// Split a multi-query SQL string into individual queries
+// Supports semicolons and newline-separated SELECT statements
+function splitSqlQueries(sql) {
+  const text = sql.trim();
+
+  // First split by semicolons
+  let parts = text.split(/;/).map((s) => s.trim()).filter((s) => s.length > 0);
+
+  // Then split any remaining parts that contain multiple SELECT statements on separate lines
+  const queries = [];
+  for (const part of parts) {
+    // Split on newlines that are followed by SELECT (case-insensitive)
+    const subParts = part.split(/\n(?=\s*select\b)/i).map((s) => s.trim()).filter((s) => s.length > 0);
+    queries.push(...subParts);
+  }
+
+  return queries;
+}
+
 function parseSql(dbOrTx, sql) {
   if (!sql || typeof sql !== "string") {
     throw new Error("sql(query) requires a SQL string");
   }
 
   const text = sql.trim().replace(/;$/, "");
+
+  // Check for independent SELECT (no FROM clause): SELECT 1, SELECT CONCAT('a','b')
+  const independentMatch = text.match(/^select\s+([\s\S]+)$/i);
+  if (independentMatch) {
+    const hasFrom = /\bfrom\s+[a-zA-Z0-9_]+/i.test(text);
+    if (!hasFrom) {
+      // Independent select — evaluate expressions without a table
+      return new IndependentQueryBuilder(independentMatch[1].trim());
+    }
+  }
+
   const match = text.match(/^select\s+([\s\S]+?)\s+from\s+([a-zA-Z0-9_]+)\s*/i);
   if (!match) {
     throw new Error("Only SELECT queries are supported in sql()");
@@ -1591,8 +1709,9 @@ function parseSqlExpression(expr) {
   }
 
   // Check for inline math expressions: field + value, field - value, field * value, field / value, field % value
+  // Also supports literal numbers on either side: 1 + 2, 3.5 * 2
   const mathMatch = trimmed.match(
-    /^([a-zA-Z_][a-zA-Z0-9_.\[\]]*)\s*([+\-*\/%])\s*(.+)$/,
+    /^([a-zA-Z_][a-zA-Z0-9_.\[\]]*|[0-9]+(?:\.[0-9]+)?)\s*([+\-*\/%])\s*(.+)$/,
   );
   if (mathMatch) {
     const field = mathMatch[1].trim();
