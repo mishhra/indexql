@@ -866,6 +866,59 @@ async function run() {
     assert.equal(results[1].rows.length, 1);
     assert.equal(results[2].rows[0].message, "1 row(s) deleted");
   });
+
+  // ========== SQL Comments ==========
+  await withDb(async (db) => {
+    await seed(db);
+
+    // Single-line comment with --
+    const r1 = await db.sql("-- this is a comment\nSELECT * FROM users LIMIT 2").exec();
+    assert.equal(r1.length, 2);
+
+    // Inline single-line comment
+    const r2 = await db.sql("SELECT * FROM users -- get all users\nLIMIT 3").exec();
+    assert.equal(r2.length, 3);
+
+    // Multi-line comment /* ... */
+    const r3 = await db.sql("/* fetch users */ SELECT * FROM users LIMIT 1").exec();
+    assert.equal(r3.length, 1);
+
+    // Multi-line comment spanning lines
+    const r4 = await db.sql(
+      "/*\n * Get user data\n * with a limit\n */\nSELECT * FROM users LIMIT 2"
+    ).exec();
+    assert.equal(r4.length, 2);
+
+    // Comment inside query
+    const r5 = await db.sql(
+      "SELECT * FROM users WHERE /* only adults */ age >= 18 LIMIT 5"
+    ).exec();
+    assert.ok(r5.every((r) => r.age >= 18));
+
+    // Comments shouldn't strip inside single-quoted strings
+    const r6 = await db.sql(
+      "INSERT INTO products (name, price) VALUES ('item -- special', 10)"
+    ).exec();
+    assert.equal(r6[0].message, "1 row(s) inserted");
+    const check = await db.sql("SELECT * FROM products WHERE name = 'item -- special'").exec();
+    assert.equal(check.length, 1);
+    assert.equal(check[0].name, "item -- special");
+
+    // Multiple queries with comments via sqlMulti
+    const results = await db.sqlMulti(
+      "-- first query\nSELECT 1 as one;\n-- second query\nSELECT 2 as two"
+    );
+    assert.equal(results.length, 2);
+    assert.equal(results[0].rows[0].one, 1);
+    assert.equal(results[1].rows[0].two, 2);
+
+    // Comment-only lines should be stripped
+    const results2 = await db.sqlMulti(
+      "SELECT 1 as x;\n-- this is just a comment\n/* another comment */;"
+    );
+    assert.equal(results2.length, 1);
+    assert.equal(results2[0].rows[0].x, 1);
+  });
 }
 
 run()

@@ -320,6 +320,25 @@ const results = await db.sqlMulti(
 // results = [{ query, rows, error }, { query, rows, error }]
 ```
 
+### Comments
+
+Single-line (`--`) and multi-line (`/* ... */`) comments are supported:
+
+```sql
+-- This is a single-line comment
+SELECT * FROM users LIMIT 5
+
+SELECT * FROM users WHERE /* only adults */ age >= 18
+
+/*
+ * Multi-line comment
+ * spanning several lines
+ */
+SELECT * FROM products
+```
+
+Comments inside quoted strings are preserved (not stripped).
+
 ## Nested JSON Objects
 
 Access nested object properties using dot notation or PostgreSQL-style arrow operators. Supports arbitrary nesting depth.

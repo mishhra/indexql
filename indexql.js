@@ -833,19 +833,29 @@ function evaluateMathFunc(row, func) {
   const num = Number(value);
   if (isNaN(num)) return undefined;
 
+  // Resolve the second argument (could be a nested func, field, or literal)
+  const resolveRight = (arg) => {
+    if (arg && arg.__func) return Number(evaluateFunc(row, arg));
+    if (typeof arg === "number") return arg;
+    const resolved = resolveField(row, arg);
+    return resolved !== undefined ? Number(resolved) : Number(arg);
+  };
+
   switch (op) {
     case "add":
-      return num + Number(args[1]);
+      return num + resolveRight(args[1]);
     case "sub":
-      return num - Number(args[1]);
+      return num - resolveRight(args[1]);
     case "mul":
-      return num * Number(args[1]);
-    case "div":
-      return Number(args[1]) === 0 ? null : num / Number(args[1]);
+      return num * resolveRight(args[1]);
+    case "div": {
+      const d = resolveRight(args[1]);
+      return d === 0 ? null : num / d;
+    }
     case "mod":
-      return num % Number(args[1]);
+      return num % resolveRight(args[1]);
     case "pow":
-      return Math.pow(num, Number(args[1]));
+      return Math.pow(num, resolveRight(args[1]));
     case "abs":
       return Math.abs(num);
     case "ceil":
@@ -1595,10 +1605,50 @@ async function parseAndRunMultiSql(dbOrTx, sql) {
   return results;
 }
 
+// Strip SQL comments: -- single line and /* multi-line */
+function stripSqlComments(sql) {
+  let result = "";
+  let i = 0;
+  let inQuote = null;
+  while (i < sql.length) {
+    const ch = sql[i];
+    // Track quoted strings so we don't strip inside them
+    if (inQuote) {
+      result += ch;
+      if (ch === inQuote) inQuote = null;
+      i++;
+      continue;
+    }
+    if (ch === "'" || ch === '"') {
+      inQuote = ch;
+      result += ch;
+      i++;
+      continue;
+    }
+    // Single-line comment: -- ...
+    if (ch === "-" && i + 1 < sql.length && sql[i + 1] === "-") {
+      // Skip until end of line
+      while (i < sql.length && sql[i] !== "\n") i++;
+      continue;
+    }
+    // Multi-line comment: /* ... */
+    if (ch === "/" && i + 1 < sql.length && sql[i + 1] === "*") {
+      i += 2;
+      while (i < sql.length && !(sql[i] === "*" && i + 1 < sql.length && sql[i + 1] === "/")) i++;
+      i += 2; // skip closing */
+      result += " "; // replace comment with space to avoid token merge
+      continue;
+    }
+    result += ch;
+    i++;
+  }
+  return result;
+}
+
 // Split a multi-query SQL string into individual queries
 // Supports semicolons and newline-separated SQL statements
 function splitSqlQueries(sql) {
-  const text = sql.trim();
+  const text = stripSqlComments(sql).trim();
 
   // First split by semicolons
   let parts = text.split(/;/).map((s) => s.trim()).filter((s) => s.length > 0);
@@ -1724,7 +1774,7 @@ function parseSql(dbOrTx, sql) {
     throw new Error("sql(query) requires a SQL string");
   }
 
-  const text = sql.trim().replace(/;$/, "");
+  const text = stripSqlComments(sql).trim().replace(/;$/, "");
   const upper = text.toUpperCase();
 
   // ---- SHOW TABLES ----
@@ -2105,11 +2155,13 @@ function parseSqlExpression(expr) {
     };
     const rightVal = Number(rightExpr);
     const right = isNaN(rightVal) ? parseSqlExpression(rightExpr) : rightVal;
+    const leftVal = Number(field);
+    const left = !isNaN(leftVal) && field !== "" ? leftVal : field;
     return {
       __func: true,
       type: "math",
       op: opMap[operator],
-      args: [field, right],
+      args: [left, right],
     };
   }
 

@@ -150,6 +150,10 @@
         border-color: #3f3f46;
       }
 
+      .icon-btn:active {
+        transform: scale(0.9);
+      }
+
       .icon-btn.danger:hover {
         background: rgba(239, 68, 68, 0.1);
         color: #ef4444;
@@ -262,6 +266,11 @@
       .btn-ghost:hover {
         color: #e4e4e7;
         background: #27272a;
+      }
+
+      .btn:active,
+      .btn-ghost:active {
+        transform: scale(0.9);
       }
 
       .output-section {
@@ -423,6 +432,39 @@
         border-bottom: 1px solid #27272a;
       }
 
+      .query-loader {
+        display: none;
+        position: absolute;
+        inset: 0;
+        background: rgba(15, 15, 16, 0.75);
+        z-index: 10;
+        align-items: center;
+        justify-content: center;
+        flex-direction: column;
+        gap: 10px;
+      }
+      .query-loader.active {
+        display: flex;
+      }
+      .query-loader .spinner {
+        width: 22px;
+        height: 22px;
+        border: 2px solid #3f3f46;
+        border-top-color: #a1a1aa;
+        border-radius: 50%;
+        animation: spin 0.6s linear infinite;
+      }
+      .query-loader .loader-text {
+        font-size: 11px;
+        color: #71717a;
+        letter-spacing: 0.5px;
+      }
+      @keyframes spin {
+        to {
+          transform: rotate(360deg);
+        }
+      }
+
       .status-bar {
         padding: 8px 16px;
         border-top: 1px solid #27272a;
@@ -571,7 +613,11 @@
             <button id="countBtn" class="btn btn-ghost">&#9776; Count</button>
           </div>
           <div id="seedInfo" class="seed-info"></div>
-          <div id="output" class="output">
+          <div id="output" class="output" style="position: relative">
+            <div id="queryLoader" class="query-loader">
+              <div class="spinner"></div>
+              <div class="loader-text">Executing</div>
+            </div>
             <div class="empty-state">
               <div class="icon">&#x276F;</div>
               <div>Run a query to see results</div>
@@ -738,8 +784,14 @@
       }
 
       function clearOutput() {
-        document.getElementById("output").innerHTML =
-          '<div class="empty-state"><div class="icon">&#x276F;</div><div>Run a query to see results</div></div>';
+        const output = document.getElementById("output");
+        const loader = document.getElementById("queryLoader");
+        output.innerHTML = "";
+        output.appendChild(loader);
+        output.insertAdjacentHTML(
+          "beforeend",
+          '<div class="empty-state"><div class="icon">&#x276F;</div><div>Run a query to see results</div></div>',
+        );
       }
 
       function updateSeedInfo(msg) {
@@ -778,9 +830,18 @@
 
         try {
           updateStatus("Running...");
+          const loader = document.getElementById("queryLoader");
+          loader.classList.add("active");
+          const loaderStart = Date.now();
 
           // Use sqlMulti to handle single or multiple queries
           const results = await db.sqlMulti(query);
+
+          // Ensure loader shows for at least 100ms
+          const elapsed = Date.now() - loaderStart;
+          if (elapsed < 100)
+            await new Promise((r) => setTimeout(r, 100 - elapsed));
+          loader.classList.remove("active");
 
           if (results.length === 1) {
             // Single query — show directly
@@ -829,6 +890,7 @@
             updateStatus(parts.join(" \u00b7 "));
           }
         } catch (err) {
+          document.getElementById("queryLoader").classList.remove("active");
           appendOutput(formatError(err.message), true);
           updateStatus("Failed");
         }
