@@ -1,0 +1,414 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>IndexQL Playground</title>
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/codemirror.min.css"
+    />
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/theme/material.min.css"
+    />
+    <style>
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+
+      body {
+        font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        min-height: 100vh;
+        padding: 20px;
+        color: #333;
+      }
+
+      .container {
+        max-width: 1600px;
+        margin: 0 auto;
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 20px;
+        height: 90vh;
+      }
+
+      .panel {
+        background: white;
+        border-radius: 8px;
+        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+      }
+
+      .header {
+        background: #f8f9fa;
+        padding: 15px;
+        border-bottom: 1px solid #e0e0e0;
+        font-weight: 600;
+        color: #667eea;
+      }
+
+      .code-editor {
+        flex: 1;
+        overflow: hidden;
+      }
+
+      .CodeMirror {
+        height: 100% !important;
+        font-family: "Courier New", monospace !important;
+      }
+
+      .controls {
+        padding: 15px;
+        border-bottom: 1px solid #e0e0e0;
+        display: grid;
+        grid-template-columns: 1fr 1fr auto;
+        gap: 10px;
+        align-items: center;
+      }
+
+      .controls select,
+      .controls button {
+        padding: 8px 12px;
+        border: 1px solid #ddd;
+        border-radius: 4px;
+        font-size: 14px;
+        cursor: pointer;
+        background: white;
+      }
+
+      .controls button {
+        background: #667eea;
+        color: white;
+        border: none;
+        font-weight: 600;
+        transition: background 0.3s;
+      }
+
+      .controls button:hover {
+        background: #764ba2;
+      }
+
+      .controls button:disabled {
+        background: #ccc;
+        cursor: not-allowed;
+      }
+
+      .output-section {
+        display: flex;
+        flex-direction: column;
+        height: 100%;
+      }
+
+      .output {
+        flex: 1;
+        overflow: auto;
+        padding: 15px;
+      }
+
+      .output-item {
+        margin-bottom: 15px;
+        padding: 10px;
+        background: #f5f5f5;
+        border-left: 4px solid #667eea;
+        border-radius: 4px;
+        font-family: "Courier New", monospace;
+        font-size: 12px;
+        max-height: 400px;
+        overflow: auto;
+      }
+
+      .output-item.error {
+        border-left-color: #d73a49;
+        background: #fdeaea;
+      }
+
+      .output-item.success {
+        border-left-color: #28a745;
+        background: #eafde9;
+      }
+
+      .output-item pre {
+        margin: 0;
+        white-space: pre-wrap;
+        word-wrap: break-word;
+      }
+
+      .status {
+        padding: 10px 15px;
+        background: #f0f0f0;
+        border-top: 1px solid #e0e0e0;
+        font-size: 12px;
+        color: #666;
+      }
+
+      .seed-info {
+        font-size: 12px;
+        color: #666;
+        margin-bottom: 10px;
+      }
+
+      @media (max-width: 1200px) {
+        .container {
+          grid-template-columns: 1fr;
+          height: auto;
+        }
+
+        .panel {
+          height: 50vh;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <!-- Editor Panel -->
+      <div class="panel">
+        <div class="header">📝 SQL Query Editor</div>
+        <div class="code-editor">
+          <textarea id="sqlInput"></textarea>
+        </div>
+        <div class="controls">
+          <select id="sampleQueries">
+            <option value="">Sample Queries</option>
+            <option value="basic-select">Basic Select</option>
+            <option value="with-where">Select with Where</option>
+            <option value="with-order">Order By & Limit</option>
+            <option value="aggregate">Aggregates & GroupBy</option>
+            <option value="join">Join</option>
+            <option value="complex">Complex Query</option>
+          </select>
+          <button id="runBtn">▶ Run Query</button>
+          <button id="clearBtn">🗑️ Clear</button>
+        </div>
+      </div>
+
+      <!-- Output Panel -->
+      <div class="panel">
+        <div class="header">📊 Results & Database</div>
+        <div class="controls">
+          <select id="dbSelect">
+            <option value="users">Users Table</option>
+            <option value="products">Products Table</option>
+            <option value="posts">Posts Table</option>
+            <option value="todos">Todos Table</option>
+          </select>
+          <button id="seedBtn">🌱 Seed Dummy Data</button>
+          <button id="countBtn">📈 Count Rows</button>
+        </div>
+        <div class="output-section">
+          <div id="seedInfo" class="seed-info"></div>
+          <div id="output" class="output"></div>
+          <div id="status" class="status">Ready</div>
+        </div>
+      </div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/codemirror.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/mode/sql/sql.min.js"></script>
+    <script src="./indexql.js"></script>
+    <script>
+      let db = null;
+      let editor = null;
+
+      const SAMPLE_QUERIES = {
+        "basic-select": "select id, name from users limit 5",
+        "with-where":
+          "select id, name, email from users where id >= 1 and id <= 10",
+        "with-order": "select id, name from users order by name asc limit 5",
+        aggregate:
+          "select title, count(*) as count from posts group by title limit 5",
+        join: "select users.firstName, posts.title from posts join users on posts.userId = users.id limit 5",
+        complex:
+          "select users.firstName, count(posts.id) as post_count from posts join users on posts.userId = users.id group by users.name order by post_count desc limit 5",
+      };
+
+      async function initDb() {
+        const schema = {
+          tables: {
+            users: {
+              keyPath: "id",
+              indexes: { email: {}, username: {} },
+            },
+            products: {
+              keyPath: "id",
+              indexes: { category: {} },
+            },
+            posts: {
+              keyPath: "id",
+              indexes: { userId: {} },
+            },
+            todos: {
+              keyPath: "id",
+              indexes: { userId: {} },
+            },
+          },
+        };
+
+        db = await IndexQL.open("playground", schema);
+        updateStatus("Database initialized");
+        updateSeedInfo("");
+      }
+
+      function updateStatus(msg) {
+        document.getElementById("status").textContent = msg;
+      }
+
+      function updateOutput(msg, isError = false) {
+        const output = document.getElementById("output");
+        const item = document.createElement("div");
+        item.className = `output-item ${isError ? "error" : "success"}`;
+
+        // Escape HTML and convert newlines to <br> tags
+        const escaped = escapeHtml(msg).replace(/\n/g, "<br>");
+        item.innerHTML = `<pre>${escaped}</pre>`;
+
+        output.appendChild(item);
+        output.scrollTop = output.scrollHeight;
+      }
+
+      function clearOutput() {
+        document.getElementById("output").innerHTML = "";
+      }
+
+      function updateSeedInfo(msg) {
+        document.getElementById("seedInfo").textContent = msg;
+      }
+
+      function escapeHtml(text) {
+        const div = document.createElement("div");
+        div.textContent = text;
+        return div.innerHTML;
+      }
+
+      document
+        .getElementById("sampleQueries")
+        .addEventListener("change", (e) => {
+          if (e.target.value) {
+            editor.setValue(SAMPLE_QUERIES[e.target.value]);
+          }
+        });
+
+      document.getElementById("runBtn").addEventListener("click", async () => {
+        if (!db) {
+          updateOutput("Database not initialized", true);
+          return;
+        }
+
+        const query = editor.getValue().trim();
+        if (!query) {
+          updateOutput("Please enter a query", true);
+          return;
+        }
+
+        try {
+          updateStatus("Running query...");
+          const result = await db.sql(query).exec();
+          clearOutput();
+          if (result.length === 0) {
+            updateOutput("No rows returned", false);
+          } else {
+            updateOutput(JSON.stringify(result, null, 2), false);
+          }
+          updateStatus(`Query executed: ${result.length} rows`);
+        } catch (err) {
+          let errorMsg = err.message;
+          if (err.message && err.message.includes("match")) {
+            errorMsg = `Syntax Error: ${err.message}\n\nCheck your SELECT query syntax. Examples:\n- SELECT * FROM users\n- SELECT id, name FROM users WHERE age > 18\n- SELECT TOP 10 * FROM products SKIP 5`;
+          }
+          updateOutput(errorMsg, true);
+          updateStatus("Query failed");
+        }
+      });
+
+      document.getElementById("clearBtn").addEventListener("click", () => {
+        editor.setValue("");
+        clearOutput();
+        updateStatus("Cleared");
+      });
+
+      document.getElementById("seedBtn").addEventListener("click", async () => {
+        if (!db) {
+          updateOutput("Database not initialized", true);
+          return;
+        }
+
+        const table = document.getElementById("dbSelect").value;
+        const resourceMap = {
+          users: "users",
+          products: "products",
+          posts: "posts",
+          todos: "todos",
+        };
+
+        try {
+          updateStatus("Seeding dummy data...");
+          const resource = resourceMap[table];
+          const seeded = await db.populateDummy({
+            resources: [resource],
+            [resource]: { mode: "replace", limit: 50 },
+          });
+
+          const count = seeded[resource] || 0;
+          clearOutput();
+          updateOutput(`Seeded ${count} rows into ${table}`, false);
+          updateSeedInfo(
+            `Last seeded: ${table} (${count} rows) · ${new Date().toLocaleTimeString()}`,
+          );
+          updateStatus("Seeding complete");
+        } catch (err) {
+          updateOutput(err.message, true);
+          updateStatus("Seeding failed");
+        }
+      });
+
+      document
+        .getElementById("countBtn")
+        .addEventListener("click", async () => {
+          if (!db) {
+            updateOutput("Database not initialized", true);
+            return;
+          }
+
+          const table = document.getElementById("dbSelect").value;
+          try {
+            updateStatus("Counting rows...");
+            const result = await db.table(table).select(null).exec();
+            clearOutput();
+            updateOutput(`${result.length} rows in ${table}`, false);
+            updateStatus(`Count: ${result.length} rows`);
+          } catch (err) {
+            updateOutput(err.message, true);
+            updateStatus("Count failed");
+          }
+        });
+
+      window.addEventListener("load", () => {
+        // Initialize CodeMirror
+        editor = CodeMirror.fromTextArea(document.getElementById("sqlInput"), {
+          lineNumbers: true,
+          mode: "text/x-sql",
+          theme: "material",
+          indentUnit: 2,
+          lineWrapping: true,
+          autofocus: true,
+          extraKeys: {
+            "Ctrl-Enter": async () => {
+              document.getElementById("runBtn").click();
+            },
+            "Cmd-Enter": async () => {
+              document.getElementById("runBtn").click();
+            },
+          },
+        });
+
+        initDb();
+      });
+    </script>
+  </body>
+</html>

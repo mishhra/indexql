@@ -1,0 +1,11 @@
+{
+  "name": "indexql",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "test": "node tests/indexql.test.js"
+  },
+  "devDependencies": {
+    "fake-indexeddb": "^5.0.2"
+  }
+}
