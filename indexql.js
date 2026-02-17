@@ -1591,7 +1591,16 @@ class SqlCommandBuilder {
         const ids = [];
         try {
           for (const row of p.rows) {
-            const id = await promisifyRequest(store.add(row));
+            // Resolve any __func expressions in the row values
+            const resolved = {};
+            for (const [key, val] of Object.entries(row)) {
+              if (val && val.__func) {
+                resolved[key] = evaluateFunc({}, val);
+              } else {
+                resolved[key] = val;
+              }
+            }
+            const id = await promisifyRequest(store.add(resolved));
             ids.push(id);
           }
           await awaitTxDone(tx);
@@ -1622,7 +1631,16 @@ class SqlCommandBuilder {
         let count = 0;
         for (const row of allRows) {
           if (whereExpr && !evaluateExpression(row, whereExpr)) continue;
-          const updated = Object.assign({}, row, p.patch);
+          // Resolve any __func expressions in the patch values
+          const resolvedPatch = {};
+          for (const [key, val] of Object.entries(p.patch)) {
+            if (val && val.__func) {
+              resolvedPatch[key] = evaluateFunc(row, val);
+            } else {
+              resolvedPatch[key] = val;
+            }
+          }
+          const updated = Object.assign({}, row, resolvedPatch);
           await promisifyRequest(store.put(updated));
           count++;
         }
@@ -1763,9 +1781,24 @@ function parseSetClause(setStr) {
     if (eqIdx === -1) throw new Error("Invalid SET clause: " + assignment);
     const col = assignment.slice(0, eqIdx).trim();
     const valStr = assignment.slice(eqIdx + 1).trim();
-    result[col] = parseSqlLiteral(valStr);
+    result[col] = parseSqlValue(valStr);
   }
   return result;
+}
+
+// Parse a SQL value: tries function/math expressions first, then falls back to literal
+function parseSqlValue(str) {
+  const trimmed = str.trim();
+  // Try parsing as a function or math expression
+  try {
+    const parsed = parseSqlExpression(trimmed);
+    if (parsed && parsed.__func) {
+      return parsed;
+    }
+  } catch (_) {
+    // Not a function expression, continue to literal parsing
+  }
+  return parseSqlLiteral(trimmed);
 }
 
 // Parse a SQL literal value: 'string', number, null, true, false, JSON object/array
@@ -1824,7 +1857,7 @@ function parseValuesRows(columns, valuesStr) {
     }
     const row = {};
     for (let i = 0; i < columns.length; i++) {
-      row[columns[i]] = parseSqlLiteral(vals[i]);
+      row[columns[i]] = parseSqlValue(vals[i]);
     }
     rows.push(row);
   }

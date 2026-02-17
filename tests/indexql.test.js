@@ -1079,6 +1079,56 @@ async function run() {
     assert.equal(multi[1].rows[0].two, 2);
     assert.notEqual(multi[2].error, null); // 5%0 fails
   });
+
+  // ── Function expressions in UPDATE SET and INSERT VALUES ──
+  await withDb(async (db) => {
+    // Seed a row
+    await db
+      .sql("INSERT INTO users (id, email, age) VALUES (1, 'test@test', 25)")
+      .exec();
+
+    // UPDATE SET with UPPER function
+    await db
+      .sql("UPDATE users SET email = UPPER('hello@test') WHERE id = 1")
+      .exec();
+    const r1 = await db.sql("SELECT * FROM users WHERE id = 1").exec();
+    assert.equal(r1[0].email, "HELLO@TEST");
+
+    // UPDATE SET with LOWER function
+    await db
+      .sql("UPDATE users SET email = LOWER('FOO@BAR') WHERE id = 1")
+      .exec();
+    const r2 = await db.sql("SELECT * FROM users WHERE id = 1").exec();
+    assert.equal(r2[0].email, "foo@bar");
+
+    // UPDATE SET with CONCAT function
+    await db
+      .sql(
+        "UPDATE users SET email = CONCAT('user', '@', 'domain.com') WHERE id = 1",
+      )
+      .exec();
+    const r3 = await db.sql("SELECT * FROM users WHERE id = 1").exec();
+    assert.equal(r3[0].email, "user@domain.com");
+
+    // UPDATE SET with math expression
+    await db.sql("UPDATE users SET age = 10 + 5 WHERE id = 1").exec();
+    const r4 = await db.sql("SELECT * FROM users WHERE id = 1").exec();
+    assert.equal(r4[0].age, 15);
+
+    // INSERT with function in VALUES
+    await db
+      .sql("INSERT INTO users (id, email, age) VALUES (2, UPPER('new@test'), 30)")
+      .exec();
+    const r5 = await db.sql("SELECT * FROM users WHERE id = 2").exec();
+    assert.equal(r5[0].email, "NEW@TEST");
+
+    // INSERT with math expression in VALUES
+    await db
+      .sql("INSERT INTO users (id, email, age) VALUES (3, 'math@test', 10 * 3)")
+      .exec();
+    const r6 = await db.sql("SELECT * FROM users WHERE id = 3").exec();
+    assert.equal(r6[0].age, 30);
+  });
 }
 
 run()
