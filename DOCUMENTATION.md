@@ -213,22 +213,111 @@ await db.transaction(["users", "orders"], "readwrite", async (tx) => {
 
 ## SQL Parser
 
-`db.sql(...)` supports:
+`db.sql(...)` returns a query builder. Call `.exec()` to run it.
 
-- `select ... from ...`
-- `left/right/inner join ... on a = b`
-- `where` with `and`, `or`, parentheses, `in`, `between`, `like`, `is null`, `is not null`
-- `group by` and `having`
-- `order by`, `limit`, `offset`
+### SELECT
 
-Example:
+- `SELECT ... FROM ...`
+- `LEFT/RIGHT/INNER JOIN ... ON a = b`
+- `WHERE` with `AND`, `OR`, parentheses, `IN`, `BETWEEN`, `LIKE`, `IS NULL`, `IS NOT NULL`
+- `GROUP BY` and `HAVING`
+- `ORDER BY`, `LIMIT`, `OFFSET`, `TOP`, `SKIP`
+- Scalar functions: `UPPER()`, `LOWER()`, `TRIM()`, `CONCAT()`, `LENGTH()`, `REPLACE()`, `ROUND()`, `ABS()`, etc.
+- Inline math: `price * 0.9`, `age + 1`
+- Independent SELECT (no FROM): `SELECT 1 + 2 AS sum`, `SELECT UPPER('hello')`
 
 ```js
-const sqlRows = await db
+const rows = await db
   .sql(
-    "select users.firstName, sum(orders.amount) as total from orders left join users on orders.userId = users.id where (users.active = true and orders.amount > 10) or users.email like '%@dev' group by users.name having total > 25 order by total desc limit 5",
+    "SELECT users.firstName, SUM(orders.amount) AS total FROM orders LEFT JOIN users ON orders.userId = users.id WHERE users.active = true GROUP BY users.name HAVING total > 25 ORDER BY total DESC LIMIT 5",
   )
   .exec();
+```
+
+### INSERT
+
+```js
+// Single row
+await db.sql("INSERT INTO users (name, email, age) VALUES ('Alice', 'alice@test', 30)").exec();
+
+// Multiple rows
+await db.sql("INSERT INTO products (name, price) VALUES ('Laptop', 1200), ('Phone', 800)").exec();
+
+// SET syntax
+await db.sql("INSERT INTO users SET name = 'Bob', email = 'bob@test', age = 25").exec();
+
+// Nested JSON objects and arrays
+await db.sql("INSERT INTO products (name, meta) VALUES ('Widget', {'color': 'red', 'weight': 150})").exec();
+await db.sql("INSERT INTO products (name, tags) VALUES ('Gadget', ['electronics', 'sale'])").exec();
+
+// Deeply nested structures
+await db.sql("INSERT INTO products (name, details) VALUES ('Phone', {'specs': {'ram': 8}, 'colors': ['black', 'white']})").exec();
+
+// Array of objects
+await db.sql("INSERT INTO products (name, variants) VALUES ('Shirt', [{'size': 'S', 'stock': 10}, {'size': 'M', 'stock': 20}])").exec();
+
+// SET syntax with nested JSON
+await db.sql("INSERT INTO products SET name = 'Laptop', specs = {'cpu': 'i7', 'ram': 16}").exec();
+```
+
+### UPDATE
+
+```js
+// Update with WHERE
+await db.sql("UPDATE users SET age = 31 WHERE name = 'Alice'").exec();
+
+// Update all rows
+await db.sql("UPDATE users SET active = false").exec();
+
+// Update multiple columns
+await db.sql("UPDATE users SET name = 'Alicia', age = 31 WHERE email = 'alice@test'").exec();
+```
+
+### DELETE
+
+```js
+// Delete with WHERE
+await db.sql("DELETE FROM users WHERE age < 18").exec();
+
+// Delete all rows
+await db.sql("DELETE FROM users").exec();
+```
+
+### DDL Commands
+
+```js
+// Show all tables
+await db.sql("SHOW TABLES").exec();
+
+// Show columns of a table (also: DESCRIBE users, DESC users)
+await db.sql("SHOW COLUMNS FROM users").exec();
+
+// Create a new table
+await db.sql("CREATE TABLE tasks (id PRIMARY KEY, title, done)").exec();
+
+// Create only if it doesn't exist
+await db.sql("CREATE TABLE IF NOT EXISTS tasks (id, title)").exec();
+
+// Drop a table
+await db.sql("DROP TABLE tasks").exec();
+
+// Drop only if it exists
+await db.sql("DROP TABLE IF EXISTS tasks").exec();
+
+// Truncate (clear all rows, keep table)
+await db.sql("TRUNCATE TABLE users").exec();
+await db.sql("TRUNCATE users").exec();
+```
+
+### Multi-Query
+
+Run multiple statements separated by `;` or newlines:
+
+```js
+const results = await db.sqlMulti(
+  "INSERT INTO products (name, price) VALUES ('Widget', 10); SELECT * FROM products"
+);
+// results = [{ query, rows, error }, { query, rows, error }]
 ```
 
 ## Nested JSON Objects
@@ -517,4 +606,4 @@ await db.populateDummy({
 - Joins and aggregations are performed in memory.
 - Queries that cannot use indexes are filtered in memory.
 - `populateDummy` uses `put()` to upsert rows.
-- `sql()` supports SELECT only.
+- `sql()` supports SELECT, INSERT, UPDATE, DELETE, and DDL commands (SHOW TABLES, CREATE TABLE, DROP TABLE, TRUNCATE).

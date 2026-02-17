@@ -1422,6 +1422,159 @@ class IndependentQueryBuilder {
   }
 }
 
+// Builder for DDL and DML operations parsed from raw SQL
+class SqlCommandBuilder {
+  constructor(dbOrTx, command, params) {
+    this._dbOrTx = dbOrTx;
+    this._command = command;
+    this._params = params;
+  }
+
+  async exec() {
+    const db = this._dbOrTx instanceof TxContext ? this._dbOrTx._db : this._dbOrTx;
+    const p = this._params;
+
+    switch (this._command) {
+      case "show_tables": {
+        const tables = Object.keys(db._schema.tables).map((t) => ({ table_name: t }));
+        return tables;
+      }
+
+      case "show_columns": {
+        const tableName = p.table;
+        if (!db._schema.tables[tableName]) {
+          throw new Error("Unknown table: " + tableName);
+        }
+        const def = db._schema.tables[tableName];
+        const cols = [];
+        cols.push({ column: def.keyPath || "id", type: "keyPath", autoIncrement: !!def.autoIncrement });
+        const indexes = def.indexes || {};
+        for (const [name, idx] of Object.entries(indexes)) {
+          cols.push({ column: name, type: "index", unique: !!idx.unique });
+        }
+        return cols;
+      }
+
+      case "create_table": {
+        const tableName = p.table;
+        if (db._schema.tables[tableName]) {
+          if (p.ifNotExists) {
+            return [{ message: "Table " + tableName + " already exists" }];
+          }
+          throw new Error("Table " + tableName + " already exists");
+        }
+        const tableDef = {
+          keyPath: p.keyPath || "id",
+          autoIncrement: p.autoIncrement !== false,
+          indexes: {},
+        };
+        // Add indexes for any non-keyPath columns
+        for (const col of p.columns) {
+          if (col.name !== tableDef.keyPath) {
+            const indexDef = {};
+            if (col.unique) indexDef.unique = true;
+            tableDef.indexes[col.name] = indexDef;
+          }
+        }
+        db._schema.tables[tableName] = tableDef;
+        // Reopen database with incremented version to apply schema change
+        db._db.close();
+        const newVersion = (db._db.version || 1) + 1;
+        db._schema.version = newVersion;
+        db._db = await openDatabase(db._db.name, db._schema);
+        return [{ message: "Table " + tableName + " created" }];
+      }
+
+      case "drop_table": {
+        const tableName = p.table;
+        if (!db._schema.tables[tableName]) {
+          if (p.ifExists) {
+            return [{ message: "Table " + tableName + " does not exist" }];
+          }
+          throw new Error("Unknown table: " + tableName);
+        }
+        delete db._schema.tables[tableName];
+        db._db.close();
+        const newVersion = (db._db.version || 1) + 1;
+        db._schema.version = newVersion;
+        db._db = await openDatabase(db._db.name, db._schema);
+        return [{ message: "Table " + tableName + " dropped" }];
+      }
+
+      case "truncate": {
+        const tableName = p.table;
+        if (!db._schema.tables[tableName]) {
+          throw new Error("Unknown table: " + tableName);
+        }
+        const tx = db._db.transaction([tableName], "readwrite");
+        const store = tx.objectStore(tableName);
+        await promisifyRequest(store.clear());
+        await awaitTxDone(tx);
+        return [{ message: "Table " + tableName + " truncated" }];
+      }
+
+      case "insert": {
+        const tableName = p.table;
+        if (!db._schema.tables[tableName]) {
+          throw new Error("Unknown table: " + tableName);
+        }
+        const tx = db._db.transaction([tableName], "readwrite");
+        const store = tx.objectStore(tableName);
+        const ids = [];
+        for (const row of p.rows) {
+          const id = await promisifyRequest(store.add(row));
+          ids.push(id);
+        }
+        await awaitTxDone(tx);
+        return [{ message: ids.length + " row(s) inserted", ids }];
+      }
+
+      case "update": {
+        const tableName = p.table;
+        if (!db._schema.tables[tableName]) {
+          throw new Error("Unknown table: " + tableName);
+        }
+        const tx = db._db.transaction([tableName], "readwrite");
+        const store = tx.objectStore(tableName);
+        const whereExpr = p.whereExpr;
+        const allRows = await cursorCollect(store);
+        let count = 0;
+        for (const row of allRows) {
+          if (whereExpr && !evaluateExpression(row, whereExpr)) continue;
+          const updated = Object.assign({}, row, p.patch);
+          await promisifyRequest(store.put(updated));
+          count++;
+        }
+        await awaitTxDone(tx);
+        return [{ message: count + " row(s) updated" }];
+      }
+
+      case "delete": {
+        const tableName = p.table;
+        if (!db._schema.tables[tableName]) {
+          throw new Error("Unknown table: " + tableName);
+        }
+        const tx = db._db.transaction([tableName], "readwrite");
+        const store = tx.objectStore(tableName);
+        const whereExpr = p.whereExpr;
+        const allRows = await cursorCollect(store);
+        let count = 0;
+        const keyPath = store.keyPath || "id";
+        for (const row of allRows) {
+          if (whereExpr && !evaluateExpression(row, whereExpr)) continue;
+          await promisifyRequest(store.delete(row[keyPath]));
+          count++;
+        }
+        await awaitTxDone(tx);
+        return [{ message: count + " row(s) deleted" }];
+      }
+
+      default:
+        throw new Error("Unknown SQL command: " + this._command);
+    }
+  }
+}
+
 // Split SQL text into multiple queries and run each one
 async function parseAndRunMultiSql(dbOrTx, sql) {
   if (!sql || typeof sql !== "string") {
@@ -1443,22 +1596,127 @@ async function parseAndRunMultiSql(dbOrTx, sql) {
 }
 
 // Split a multi-query SQL string into individual queries
-// Supports semicolons and newline-separated SELECT statements
+// Supports semicolons and newline-separated SQL statements
 function splitSqlQueries(sql) {
   const text = sql.trim();
 
   // First split by semicolons
   let parts = text.split(/;/).map((s) => s.trim()).filter((s) => s.length > 0);
 
-  // Then split any remaining parts that contain multiple SELECT statements on separate lines
+  // Then split any remaining parts that contain multiple statements on separate lines
+  const stmtKeywords = /\n(?=\s*(?:select|insert|update|delete|create|drop|truncate|show|alter|describe|explain)\b)/i;
   const queries = [];
   for (const part of parts) {
-    // Split on newlines that are followed by SELECT (case-insensitive)
-    const subParts = part.split(/\n(?=\s*select\b)/i).map((s) => s.trim()).filter((s) => s.length > 0);
+    const subParts = part.split(stmtKeywords).map((s) => s.trim()).filter((s) => s.length > 0);
     queries.push(...subParts);
   }
 
   return queries;
+}
+
+// Parse SQL SET clause: "col1 = val1, col2 = val2" → { col1: val1, col2: val2 }
+function parseSetClause(setStr) {
+  const result = {};
+  // Split carefully on commas not inside quotes/parens
+  const assignments = splitCsv(setStr);
+  for (const assignment of assignments) {
+    const eqIdx = assignment.indexOf("=");
+    if (eqIdx === -1) throw new Error("Invalid SET clause: " + assignment);
+    const col = assignment.slice(0, eqIdx).trim();
+    const valStr = assignment.slice(eqIdx + 1).trim();
+    result[col] = parseSqlLiteral(valStr);
+  }
+  return result;
+}
+
+// Parse a SQL literal value: 'string', number, null, true, false, JSON object/array
+function parseSqlLiteral(str) {
+  const trimmed = str.trim();
+  // Quoted string (single or double)
+  if (/^'([\s\S]*)'$/.test(trimmed)) {
+    return trimmed.slice(1, -1).replace(/''/g, "'");
+  }
+  if (/^"([\s\S]*)"$/.test(trimmed)) {
+    return trimmed.slice(1, -1).replace(/""/g, '"');
+  }
+  // null
+  if (/^null$/i.test(trimmed)) return null;
+  // boolean
+  if (/^true$/i.test(trimmed)) return true;
+  if (/^false$/i.test(trimmed)) return false;
+  // JSON object or array
+  if ((trimmed[0] === "{" && trimmed[trimmed.length - 1] === "}") ||
+      (trimmed[0] === "[" && trimmed[trimmed.length - 1] === "]")) {
+    try {
+      // SQL uses single quotes for strings — convert to double quotes for JSON parse
+      const jsonStr = trimmed.replace(/'([^']*)'/g, '"$1"');
+      return JSON.parse(jsonStr);
+    } catch (e) {
+      // fallback: try direct parse in case it's already valid JSON
+      try { return JSON.parse(trimmed); } catch (_) {}
+    }
+  }
+  // number
+  const num = Number(trimmed);
+  if (!isNaN(num) && trimmed !== "") return num;
+  // fallback: return as string
+  return trimmed;
+}
+
+// Parse VALUES rows: "(v1, v2), (v3, v4)" → [{col1: v1, col2: v2}, ...]
+// Handles nested JSON objects/arrays inside value tuples
+function parseValuesRows(columns, valuesStr) {
+  const rows = [];
+  const groups = extractValueGroups(valuesStr);
+  for (const group of groups) {
+    const vals = splitCsv(group);
+    if (vals.length !== columns.length) {
+      throw new Error(
+        "Column count (" + columns.length + ") doesn't match value count (" + vals.length + ")",
+      );
+    }
+    const row = {};
+    for (let i = 0; i < columns.length; i++) {
+      row[columns[i]] = parseSqlLiteral(vals[i]);
+    }
+    rows.push(row);
+  }
+  if (rows.length === 0) {
+    throw new Error("No values found in INSERT statement");
+  }
+  return rows;
+}
+
+// Extract top-level (...) groups from a VALUES clause, respecting nested {}, [], ()
+function extractValueGroups(str) {
+  const groups = [];
+  let i = 0;
+  while (i < str.length) {
+    if (str[i] === "(") {
+      // Find the matching close paren, respecting nesting and quotes
+      let depth = 1;
+      let j = i + 1;
+      let inQuote = null;
+      while (j < str.length && depth > 0) {
+        const ch = str[j];
+        if (inQuote) {
+          if (ch === inQuote) inQuote = null;
+        } else if (ch === "'" || ch === '"') {
+          inQuote = ch;
+        } else if (ch === "(" || ch === "{" || ch === "[") {
+          depth++;
+        } else if (ch === ")" || ch === "}" || ch === "]") {
+          depth--;
+        }
+        if (depth > 0) j++;
+      }
+      groups.push(str.slice(i + 1, j).trim());
+      i = j + 1;
+    } else {
+      i++;
+    }
+  }
+  return groups;
 }
 
 function parseSql(dbOrTx, sql) {
@@ -1467,7 +1725,128 @@ function parseSql(dbOrTx, sql) {
   }
 
   const text = sql.trim().replace(/;$/, "");
+  const upper = text.toUpperCase();
 
+  // ---- SHOW TABLES ----
+  if (/^show\s+tables$/i.test(text)) {
+    return new SqlCommandBuilder(dbOrTx, "show_tables", {});
+  }
+
+  // ---- SHOW COLUMNS FROM tableName / DESCRIBE tableName ----
+  {
+    const m = text.match(/^(?:show\s+columns\s+from|describe|desc)\s+([a-zA-Z0-9_]+)$/i);
+    if (m) {
+      return new SqlCommandBuilder(dbOrTx, "show_columns", { table: m[1] });
+    }
+  }
+
+  // ---- CREATE TABLE ----
+  {
+    const m = text.match(
+      /^create\s+table\s+(if\s+not\s+exists\s+)?([a-zA-Z0-9_]+)\s*\(\s*([\s\S]+)\s*\)$/i,
+    );
+    if (m) {
+      const ifNotExists = !!m[1];
+      const tableName = m[2];
+      const colDefs = splitCsv(m[3]);
+      const columns = [];
+      let keyPath = null;
+      let autoIncrement = true;
+      for (const cd of colDefs) {
+        const parts = cd.trim().split(/\s+/);
+        const colName = parts[0];
+        const rest = cd.toUpperCase();
+        const isUnique = /\bUNIQUE\b/.test(rest);
+        const isPrimary = /\bPRIMARY\s*KEY\b/.test(rest);
+        if (isPrimary) {
+          keyPath = colName;
+          // If the type looks non-numeric, no autoIncrement
+          if (/\b(VARCHAR|TEXT|CHAR)\b/i.test(rest)) {
+            autoIncrement = false;
+          }
+        }
+        columns.push({ name: colName, unique: isUnique, primary: isPrimary });
+      }
+      return new SqlCommandBuilder(dbOrTx, "create_table", {
+        table: tableName,
+        columns,
+        keyPath: keyPath || "id",
+        autoIncrement,
+        ifNotExists,
+      });
+    }
+  }
+
+  // ---- DROP TABLE ----
+  {
+    const m = text.match(/^drop\s+table\s+(if\s+exists\s+)?([a-zA-Z0-9_]+)$/i);
+    if (m) {
+      return new SqlCommandBuilder(dbOrTx, "drop_table", {
+        table: m[2],
+        ifExists: !!m[1],
+      });
+    }
+  }
+
+  // ---- TRUNCATE TABLE / TRUNCATE ----
+  {
+    const m = text.match(/^truncate\s+(?:table\s+)?([a-zA-Z0-9_]+)$/i);
+    if (m) {
+      return new SqlCommandBuilder(dbOrTx, "truncate", { table: m[1] });
+    }
+  }
+
+  // ---- INSERT INTO ----
+  {
+    // INSERT INTO table (col1, col2, ...) VALUES (v1, v2, ...), (v3, v4, ...)
+    const m = text.match(
+      /^insert\s+into\s+([a-zA-Z0-9_]+)\s*\(\s*([\s\S]+?)\s*\)\s*values\s+([\s\S]+)$/i,
+    );
+    if (m) {
+      const tableName = m[1];
+      const colList = splitCsv(m[2]).map((c) => c.trim());
+      const valuesStr = m[3];
+      const rows = parseValuesRows(colList, valuesStr);
+      return new SqlCommandBuilder(dbOrTx, "insert", { table: tableName, rows });
+    }
+
+    // INSERT INTO table SET col1 = val1, col2 = val2
+    const mSet = text.match(
+      /^insert\s+into\s+([a-zA-Z0-9_]+)\s+set\s+([\s\S]+)$/i,
+    );
+    if (mSet) {
+      const tableName = mSet[1];
+      const row = parseSetClause(mSet[2]);
+      return new SqlCommandBuilder(dbOrTx, "insert", { table: tableName, rows: [row] });
+    }
+  }
+
+  // ---- UPDATE ----
+  {
+    const m = text.match(
+      /^update\s+([a-zA-Z0-9_]+)\s+set\s+([\s\S]+?)(?:\s+where\s+([\s\S]+))?$/i,
+    );
+    if (m) {
+      const tableName = m[1];
+      const patch = parseSetClause(m[2]);
+      const whereExpr = m[3] ? parseWhereExpression(m[3]) : null;
+      return new SqlCommandBuilder(dbOrTx, "update", { table: tableName, patch, whereExpr });
+    }
+  }
+
+  // ---- DELETE FROM ----
+  {
+    const m = text.match(
+      /^delete\s+from\s+([a-zA-Z0-9_]+)(?:\s+where\s+([\s\S]+))?$/i,
+    );
+    if (m) {
+      const tableName = m[1];
+      const whereExpr = m[2] ? parseWhereExpression(m[2]) : null;
+      return new SqlCommandBuilder(dbOrTx, "delete", { table: tableName, whereExpr });
+    }
+  }
+
+  // ---- SELECT (existing logic) ----
   // Check for independent SELECT (no FROM clause): SELECT 1, SELECT CONCAT('a','b')
   const independentMatch = text.match(/^select\s+([\s\S]+)$/i);
   if (independentMatch) {
@@ -1480,7 +1859,7 @@ function parseSql(dbOrTx, sql) {
 
   const match = text.match(/^select\s+([\s\S]+?)\s+from\s+([a-zA-Z0-9_]+)\s*/i);
   if (!match) {
-    throw new Error("Only SELECT queries are supported in sql()");
+    throw new Error("Unsupported SQL command: " + text.split(/\s+/)[0]);
   }
 
   const selectList = match[1];
@@ -2224,11 +2603,13 @@ function parseValue(value) {
 }
 
 function splitCsv(text) {
-  // Parenthesis-aware CSV split: respects commas inside function calls and strings
+  // Bracket-aware CSV split: respects commas inside (), {}, [], and strings
   const result = [];
   let depth = 0;
   let current = "";
   let inQuote = null;
+  const OPENERS = { "(": 1, "{": 1, "[": 1 };
+  const CLOSERS = { ")": 1, "}": 1, "]": 1 };
   for (let i = 0; i < text.length; i++) {
     const ch = text[i];
     if (inQuote) {
@@ -2241,12 +2622,12 @@ function splitCsv(text) {
       current += ch;
       continue;
     }
-    if (ch === "(") {
+    if (OPENERS[ch]) {
       depth++;
       current += ch;
       continue;
     }
-    if (ch === ")") {
+    if (CLOSERS[ch]) {
       depth--;
       current += ch;
       continue;

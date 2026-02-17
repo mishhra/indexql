@@ -12,15 +12,8 @@
       rel="stylesheet"
       href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/theme/material.min.css"
     />
-    <link
-      rel="preconnect"
-      href="https://fonts.googleapis.com"
-    />
-    <link
-      rel="preconnect"
-      href="https://fonts.gstatic.com"
-      crossorigin
-    />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
       href="https://fonts.googleapis.com/css2?family=Geist+Mono:wght@400;500;600;700&family=Inter:wght@400;500;600;700&display=swap"
       rel="stylesheet"
@@ -33,7 +26,12 @@
       }
 
       body {
-        font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        font-family:
+          "Inter",
+          -apple-system,
+          BlinkMacSystemFont,
+          "Segoe UI",
+          sans-serif;
         background: #0f0f10;
         min-height: 100vh;
         padding: 16px;
@@ -112,8 +110,12 @@
         flex-shrink: 0;
       }
 
-      .header-dot.green { background: #22c55e; }
-      .header-dot.blue { background: #60a5fa; }
+      .header-dot.green {
+        background: #22c55e;
+      }
+      .header-dot.blue {
+        background: #60a5fa;
+      }
 
       .header-title {
         font-size: 13px;
@@ -161,7 +163,9 @@
 
       .CodeMirror {
         height: 100% !important;
-        font-family: "Geist Mono", "Fira Code", "JetBrains Mono", "Cascadia Code", monospace !important;
+        font-family:
+          "Geist Mono", "Fira Code", "JetBrains Mono", "Cascadia Code",
+          monospace !important;
         font-size: 13px !important;
         line-height: 1.6 !important;
         background: #18181b !important;
@@ -334,18 +338,26 @@
       }
 
       .output-item.collapsible.collapsed .output-content::after {
-        content: '';
+        content: "";
         position: absolute;
         bottom: 0;
         left: 0;
         right: 0;
         height: 60px;
-        background: linear-gradient(to bottom, transparent, rgba(34, 197, 94, 0.04));
+        background: linear-gradient(
+          to bottom,
+          transparent,
+          rgba(34, 197, 94, 0.04)
+        );
         pointer-events: none;
       }
 
       .output-item.collapsible.collapsed.error .output-content::after {
-        background: linear-gradient(to bottom, transparent, rgba(239, 68, 68, 0.06));
+        background: linear-gradient(
+          to bottom,
+          transparent,
+          rgba(239, 68, 68, 0.06)
+        );
       }
 
       .collapse-toggle {
@@ -491,7 +503,13 @@
             <span class="header-title">Query Editor</span>
           </div>
           <div class="header-actions">
-            <button id="clearEditorBtn" class="icon-btn danger" title="Clear editor">&#x2715;</button>
+            <button
+              id="clearEditorBtn"
+              class="icon-btn danger"
+              title="Clear editor"
+            >
+              &#x2715;
+            </button>
           </div>
         </div>
         <div class="code-editor">
@@ -508,8 +526,14 @@
             <option value="functions">Functions</option>
             <option value="independent">Independent Select</option>
             <option value="multi">Multi-Query</option>
+            <option value="insert">Insert</option>
+            <option value="update">Update</option>
+            <option value="delete">Delete</option>
+            <option value="ddl">DDL Commands</option>
           </select>
-          <button id="runBtn" class="btn btn-primary">&#9654; Run <span class="kbd">Ctrl+Enter</span></button>
+          <button id="runBtn" class="btn btn-primary">
+            &#9654; Run <span class="kbd">Ctrl+Enter</span>
+          </button>
         </div>
       </div>
 
@@ -521,18 +545,29 @@
             <span class="header-title">Results</span>
           </div>
           <div class="header-actions">
-            <button id="clearOutputBtn" class="icon-btn danger" title="Clear results">&#x2715;</button>
+            <button
+              id="clearOutputBtn"
+              class="icon-btn danger"
+              title="Clear results"
+            >
+              &#x2715;
+            </button>
           </div>
         </div>
         <div class="output-section">
-          <div class="controls" style="border-top: none; border-bottom: 1px solid #27272a;">
+          <div
+            class="controls"
+            style="border-top: none; border-bottom: 1px solid #27272a"
+          >
             <select id="dbSelect">
               <option value="users">users</option>
               <option value="products">products</option>
               <option value="posts">posts</option>
               <option value="todos">todos</option>
             </select>
-            <button id="seedBtn" class="btn btn-secondary">&#127793; Seed</button>
+            <button id="seedBtn" class="btn btn-secondary">
+              &#127793; Seed
+            </button>
             <button id="countBtn" class="btn btn-ghost">&#9776; Count</button>
           </div>
           <div id="seedInfo" class="seed-info"></div>
@@ -542,7 +577,9 @@
               <div>Run a query to see results</div>
             </div>
           </div>
-          <div id="status" class="status-bar"><span class="dot"></span> Ready</div>
+          <div id="status" class="status-bar">
+            <span class="dot"></span> Ready
+          </div>
         </div>
       </div>
     </div>
@@ -568,6 +605,13 @@
           "SELECT 1 AS one, 2 + 3 AS sum, UPPER('hello') AS greeting",
         multi:
           "SELECT * FROM users LIMIT 3\nSELECT name, price FROM products LIMIT 3",
+        insert:
+          "INSERT INTO products (name, price) VALUES ('Widget', 9.99), ('Gadget', 19.99);\nSELECT * FROM products",
+        update:
+          "UPDATE users SET email = 'updated@test' WHERE id = 1;\nSELECT * FROM users WHERE id = 1",
+        delete:
+          "DELETE FROM products WHERE price < 10;\nSELECT * FROM products",
+        ddl: "SHOW TABLES;\nDESCRIBE users;\nCREATE TABLE tasks (id PRIMARY KEY, title, done);\nSHOW TABLES",
       };
 
       async function initDb() {
@@ -598,12 +642,18 @@
       }
 
       function updateStatus(msg) {
-        document.getElementById("status").innerHTML = '<span class="dot"></span> ' + escapeHtml(msg);
+        document.getElementById("status").innerHTML =
+          '<span class="dot"></span> ' + escapeHtml(msg);
       }
 
       const COLLAPSE_LINE_THRESHOLD = 12;
 
-      function appendOutput(msg, isError = false, queryLabel = null, rowCount = null) {
+      function appendOutput(
+        msg,
+        isError = false,
+        queryLabel = null,
+        rowCount = null,
+      ) {
         const output = document.getElementById("output");
         // Remove empty state if present
         const emptyState = output.querySelector(".empty-state");
@@ -624,26 +674,42 @@
         if (queryLabel || (rowCount !== null && rowCount > 0)) {
           html += '<div class="output-header">';
           if (queryLabel) {
-            html += '<span class="query-label" style="margin:0;padding:0;border:0;">' + escapeHtml(queryLabel) + "</span>";
+            html +=
+              '<span class="query-label" style="margin:0;padding:0;border:0;">' +
+              escapeHtml(queryLabel) +
+              "</span>";
           }
           if (rowCount !== null && rowCount > 0) {
-            html += '<span class="row-count-badge">' + rowCount + " row" + (rowCount !== 1 ? "s" : "") + "</span>";
+            html +=
+              '<span class="row-count-badge">' +
+              rowCount +
+              " row" +
+              (rowCount !== 1 ? "s" : "") +
+              "</span>";
           }
           html += "</div>";
         }
 
         if (isLong) {
-          html += '<button class="collapse-toggle top" onclick="toggleCollapse(this)">';
+          html +=
+            '<button class="collapse-toggle top" onclick="toggleCollapse(this)">';
           html += '<span class="chevron">&#x25BC;</span> Collapse';
-          html += '</button>';
+          html += "</button>";
         }
 
-        html += '<div class="output-content"><pre>' + escapeHtml(msg) + "</pre></div>";
+        html +=
+          '<div class="output-content"><pre>' +
+          escapeHtml(msg) +
+          "</pre></div>";
 
         if (isLong) {
-          html += '<button class="collapse-toggle bottom" onclick="toggleCollapse(this)">';
-          html += '<span class="chevron">&#x25BC;</span> Show all ' + lineCount + ' lines';
-          html += '</button>';
+          html +=
+            '<button class="collapse-toggle bottom" onclick="toggleCollapse(this)">';
+          html +=
+            '<span class="chevron">&#x25BC;</span> Show all ' +
+            lineCount +
+            " lines";
+          html += "</button>";
         }
 
         item.innerHTML = html;
@@ -655,11 +721,16 @@
       function toggleCollapse(btn) {
         const item = btn.closest(".output-item");
         const isCollapsed = item.classList.toggle("collapsed");
-        const lineCount = item.querySelector("pre").textContent.split("\n").length;
+        const lineCount = item
+          .querySelector("pre")
+          .textContent.split("\n").length;
         const buttons = item.querySelectorAll(".collapse-toggle");
-        buttons.forEach(function(b) {
+        buttons.forEach(function (b) {
           if (isCollapsed) {
-            b.innerHTML = '<span class="chevron">&#x25BC;</span> Show all ' + lineCount + ' lines';
+            b.innerHTML =
+              '<span class="chevron">&#x25BC;</span> Show all ' +
+              lineCount +
+              " lines";
           } else {
             b.innerHTML = '<span class="chevron">&#x25BC;</span> Collapse';
           }
@@ -721,8 +792,15 @@
               appendOutput("No rows returned", false);
               updateStatus("0 rows");
             } else {
-              appendOutput(JSON.stringify(r.rows, null, 2), false, null, r.rows.length);
-              updateStatus(r.rows.length + " row" + (r.rows.length !== 1 ? "s" : ""));
+              appendOutput(
+                JSON.stringify(r.rows, null, 2),
+                false,
+                null,
+                r.rows.length,
+              );
+              updateStatus(
+                r.rows.length + " row" + (r.rows.length !== 1 ? "s" : ""),
+              );
             }
           } else {
             // Multiple queries — show each with its query label
@@ -735,7 +813,12 @@
               } else if (r.rows.length === 0) {
                 appendOutput("No rows returned", false, r.query);
               } else {
-                appendOutput(JSON.stringify(r.rows, null, 2), false, r.query, r.rows.length);
+                appendOutput(
+                  JSON.stringify(r.rows, null, 2),
+                  false,
+                  r.query,
+                  r.rows.length,
+                );
                 totalRows += r.rows.length;
               }
             }
@@ -753,22 +836,30 @@
 
       function formatError(msg) {
         if (msg && msg.includes("match")) {
-          return "Syntax Error: " + msg + "\n\nCheck your query syntax. Examples:\n  SELECT * FROM users\n  SELECT 1 + 2 AS sum\n  SELECT UPPER('hello')";
+          return (
+            "Syntax Error: " +
+            msg +
+            "\n\nCheck your query syntax. Examples:\n  SELECT * FROM users\n  SELECT 1 + 2 AS sum\n  SELECT UPPER('hello')"
+          );
         }
         return msg;
       }
 
       // Clear editor only
-      document.getElementById("clearEditorBtn").addEventListener("click", () => {
-        editor.setValue("");
-        editor.focus();
-      });
+      document
+        .getElementById("clearEditorBtn")
+        .addEventListener("click", () => {
+          editor.setValue("");
+          editor.focus();
+        });
 
       // Clear results only
-      document.getElementById("clearOutputBtn").addEventListener("click", () => {
-        clearOutput();
-        updateStatus("Cleared");
-      });
+      document
+        .getElementById("clearOutputBtn")
+        .addEventListener("click", () => {
+          clearOutput();
+          updateStatus("Cleared");
+        });
 
       document.getElementById("seedBtn").addEventListener("click", async () => {
         if (!db) {
@@ -796,7 +887,12 @@
           clearOutput();
           appendOutput("Seeded " + count + " rows into " + table, false);
           updateSeedInfo(
-            "Last seeded: " + table + " (" + count + " rows) \u00b7 " + new Date().toLocaleTimeString(),
+            "Last seeded: " +
+              table +
+              " (" +
+              count +
+              " rows) \u00b7 " +
+              new Date().toLocaleTimeString(),
           );
           updateStatus("Seeded " + count + " rows");
         } catch (err) {

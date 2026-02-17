@@ -578,6 +578,294 @@ async function run() {
     assert.equal(results4[0].error, null);
     assert.ok(results4[1].error !== null);
   });
+
+  // ========== SQL INSERT ==========
+  await withDb(async (db) => {
+    // INSERT INTO ... VALUES (single row)
+    const result = await db.sql(
+      "INSERT INTO products (name, price) VALUES ('Widget', 9.99)"
+    ).exec();
+    assert.equal(result[0].message, "1 row(s) inserted");
+    const rows = await db.sql("SELECT * FROM products").exec();
+    assert.equal(rows.length, 1);
+    assert.equal(rows[0].name, "Widget");
+    assert.equal(rows[0].price, 9.99);
+  });
+
+  await withDb(async (db) => {
+    // INSERT INTO ... VALUES (multiple rows)
+    const result = await db.sql(
+      "INSERT INTO products (name, price) VALUES ('Laptop', 1200), ('Phone', 800), ('Tablet', 500)"
+    ).exec();
+    assert.equal(result[0].message, "3 row(s) inserted");
+    const rows = await db.sql("SELECT * FROM products ORDER BY price ASC").exec();
+    assert.equal(rows.length, 3);
+    assert.equal(rows[0].name, "Tablet");
+    assert.equal(rows[2].name, "Laptop");
+  });
+
+  await withDb(async (db) => {
+    // INSERT INTO ... SET
+    const result = await db.sql(
+      "INSERT INTO users SET name = 'Bob', email = 'bob@test', age = 25, active = true"
+    ).exec();
+    assert.equal(result[0].message, "1 row(s) inserted");
+    const rows = await db.sql("SELECT * FROM users").exec();
+    assert.equal(rows.length, 1);
+    assert.equal(rows[0].name, "Bob");
+    assert.equal(rows[0].age, 25);
+    assert.equal(rows[0].active, true);
+  });
+
+  await withDb(async (db) => {
+    // INSERT with null and boolean values
+    await db.sql(
+      "INSERT INTO users (name, email, age, active) VALUES ('Test', 'test@test', null, false)"
+    ).exec();
+    const rows = await db.sql("SELECT * FROM users").exec();
+    assert.equal(rows[0].age, null);
+    assert.equal(rows[0].active, false);
+  });
+
+  await withDb(async (db) => {
+    // INSERT with nested JSON object
+    await db.sql(
+      "INSERT INTO products (name, price, meta) VALUES ('Widget', 9.99, {'color': 'red', 'weight': 150})"
+    ).exec();
+    const rows = await db.sql("SELECT * FROM products").exec();
+    assert.equal(rows[0].name, "Widget");
+    assert.deepEqual(rows[0].meta, { color: "red", weight: 150 });
+  });
+
+  await withDb(async (db) => {
+    // INSERT with nested JSON array
+    await db.sql(
+      "INSERT INTO products (name, tags) VALUES ('Gadget', ['electronics', 'sale', 'new'])"
+    ).exec();
+    const rows = await db.sql("SELECT * FROM products").exec();
+    assert.deepEqual(rows[0].tags, ["electronics", "sale", "new"]);
+  });
+
+  await withDb(async (db) => {
+    // INSERT with deeply nested object
+    await db.sql(
+      "INSERT INTO products (name, details) VALUES ('Phone', {'specs': {'ram': 8, 'storage': 256}, 'colors': ['black', 'white']})"
+    ).exec();
+    const rows = await db.sql("SELECT * FROM products").exec();
+    assert.deepEqual(rows[0].details, { specs: { ram: 8, storage: 256 }, colors: ["black", "white"] });
+  });
+
+  await withDb(async (db) => {
+    // INSERT with array of objects
+    await db.sql(
+      "INSERT INTO products (name, variants) VALUES ('Shirt', [{'size': 'S', 'stock': 10}, {'size': 'M', 'stock': 20}])"
+    ).exec();
+    const rows = await db.sql("SELECT * FROM products").exec();
+    assert.equal(rows[0].variants.length, 2);
+    assert.equal(rows[0].variants[0].size, "S");
+    assert.equal(rows[0].variants[1].stock, 20);
+  });
+
+  await withDb(async (db) => {
+    // INSERT SET with nested JSON
+    await db.sql(
+      "INSERT INTO products SET name = 'Laptop', specs = {'cpu': 'i7', 'ram': 16}"
+    ).exec();
+    const rows = await db.sql("SELECT * FROM products").exec();
+    assert.deepEqual(rows[0].specs, { cpu: "i7", ram: 16 });
+  });
+
+  // ========== SQL UPDATE ==========
+  await withDb(async (db) => {
+    await db.table("users").insert([
+      { name: "Alice", email: "alice@test", age: 30, active: true },
+      { name: "Bob", email: "bob@test", age: 25, active: true },
+    ]).exec();
+
+    // UPDATE with WHERE
+    const result = await db.sql("UPDATE users SET age = 31 WHERE name = 'Alice'").exec();
+    assert.equal(result[0].message, "1 row(s) updated");
+    const rows = await db.sql("SELECT * FROM users WHERE name = 'Alice'").exec();
+    assert.equal(rows[0].age, 31);
+  });
+
+  await withDb(async (db) => {
+    await db.table("users").insert([
+      { name: "Alice", email: "alice@test", age: 30, active: true },
+      { name: "Bob", email: "bob@test", age: 25, active: true },
+    ]).exec();
+
+    // UPDATE without WHERE (all rows)
+    const result = await db.sql("UPDATE users SET active = false").exec();
+    assert.equal(result[0].message, "2 row(s) updated");
+    const rows = await db.sql("SELECT * FROM users").exec();
+    assert.ok(rows.every((r) => r.active === false));
+  });
+
+  await withDb(async (db) => {
+    await db.table("users").insert([
+      { name: "Alice", email: "alice@test", age: 30, active: true },
+    ]).exec();
+
+    // UPDATE multiple columns
+    await db.sql("UPDATE users SET name = 'Alicia', age = 31 WHERE email = 'alice@test'").exec();
+    const rows = await db.sql("SELECT * FROM users").exec();
+    assert.equal(rows[0].name, "Alicia");
+    assert.equal(rows[0].age, 31);
+  });
+
+  // ========== SQL DELETE ==========
+  await withDb(async (db) => {
+    await db.table("users").insert([
+      { name: "Alice", email: "alice@test", age: 30, active: true },
+      { name: "Bob", email: "bob@test", age: 25, active: true },
+    ]).exec();
+
+    // DELETE with WHERE
+    const result = await db.sql("DELETE FROM users WHERE name = 'Bob'").exec();
+    assert.equal(result[0].message, "1 row(s) deleted");
+    const rows = await db.sql("SELECT * FROM users").exec();
+    assert.equal(rows.length, 1);
+    assert.equal(rows[0].name, "Alice");
+  });
+
+  await withDb(async (db) => {
+    await db.table("users").insert([
+      { name: "Alice", email: "alice@test", age: 30, active: true },
+      { name: "Bob", email: "bob@test", age: 25, active: true },
+    ]).exec();
+
+    // DELETE without WHERE (all rows)
+    const result = await db.sql("DELETE FROM users").exec();
+    assert.equal(result[0].message, "2 row(s) deleted");
+    const rows = await db.sql("SELECT * FROM users").exec();
+    assert.equal(rows.length, 0);
+  });
+
+  // ========== DDL Commands ==========
+  await withDb(async (db) => {
+    // SHOW TABLES
+    const result = await db.sql("SHOW TABLES").exec();
+    const tableNames = result.map((r) => r.table_name).sort();
+    assert.ok(tableNames.includes("users"));
+    assert.ok(tableNames.includes("orders"));
+    assert.ok(tableNames.includes("products"));
+  });
+
+  await withDb(async (db) => {
+    // SHOW COLUMNS FROM / DESCRIBE
+    const result = await db.sql("SHOW COLUMNS FROM users").exec();
+    const cols = result.map((r) => r.column);
+    assert.ok(cols.includes("id"));
+    assert.ok(cols.includes("email"));
+    assert.ok(cols.includes("age"));
+
+    // DESCRIBE synonym
+    const result2 = await db.sql("DESCRIBE users").exec();
+    assert.deepEqual(result, result2);
+  });
+
+  await withDb(async (db) => {
+    // CREATE TABLE
+    const result = await db.sql("CREATE TABLE tasks (id PRIMARY KEY, title, done)").exec();
+    assert.equal(result[0].message, "Table tasks created");
+
+    // Should appear in SHOW TABLES
+    const tables = await db.sql("SHOW TABLES").exec();
+    assert.ok(tables.some((t) => t.table_name === "tasks"));
+
+    // Should be usable
+    await db.sql("INSERT INTO tasks (title, done) VALUES ('Buy milk', false)").exec();
+    const rows = await db.sql("SELECT * FROM tasks").exec();
+    assert.equal(rows.length, 1);
+    assert.equal(rows[0].title, "Buy milk");
+  });
+
+  await withDb(async (db) => {
+    // CREATE TABLE IF NOT EXISTS
+    const result = await db.sql("CREATE TABLE IF NOT EXISTS users (id, name)").exec();
+    assert.equal(result[0].message, "Table users already exists");
+  });
+
+  await withDb(async (db) => {
+    // DROP TABLE
+    const result = await db.sql("DROP TABLE products").exec();
+    assert.equal(result[0].message, "Table products dropped");
+
+    const tables = await db.sql("SHOW TABLES").exec();
+    assert.ok(!tables.some((t) => t.table_name === "products"));
+  });
+
+  await withDb(async (db) => {
+    // DROP TABLE IF EXISTS (nonexistent)
+    const result = await db.sql("DROP TABLE IF EXISTS nonexistent").exec();
+    assert.equal(result[0].message, "Table nonexistent does not exist");
+  });
+
+  await withDb(async (db) => {
+    // TRUNCATE TABLE
+    await db.table("users").insert([
+      { name: "Alice", email: "alice@test", age: 30, active: true },
+      { name: "Bob", email: "bob@test", age: 25, active: false },
+    ]).exec();
+
+    let rows = await db.sql("SELECT * FROM users").exec();
+    assert.equal(rows.length, 2);
+
+    const result = await db.sql("TRUNCATE TABLE users").exec();
+    assert.equal(result[0].message, "Table users truncated");
+
+    rows = await db.sql("SELECT * FROM users").exec();
+    assert.equal(rows.length, 0);
+  });
+
+  await withDb(async (db) => {
+    // TRUNCATE without TABLE keyword
+    await db.table("products").insert([
+      { name: "Widget", price: 10 },
+    ]).exec();
+
+    await db.sql("TRUNCATE products").exec();
+    const rows = await db.sql("SELECT * FROM products").exec();
+    assert.equal(rows.length, 0);
+  });
+
+  // ========== Multi-query with mixed commands ==========
+  await withDb(async (db) => {
+    // INSERT + SELECT via sqlMulti
+    const results = await db.sqlMulti(
+      "INSERT INTO products (name, price) VALUES ('Laptop', 1200); SELECT * FROM products"
+    );
+    assert.equal(results.length, 2);
+    assert.equal(results[0].error, null);
+    assert.equal(results[0].rows[0].message, "1 row(s) inserted");
+    assert.equal(results[1].rows.length, 1);
+    assert.equal(results[1].rows[0].name, "Laptop");
+  });
+
+  await withDb(async (db) => {
+    // INSERT + UPDATE + SELECT via sqlMulti
+    const results = await db.sqlMulti(
+      "INSERT INTO users (name, email, age, active) VALUES ('Alice', 'a@t', 30, true);\n" +
+      "UPDATE users SET age = 31 WHERE name = 'Alice';\n" +
+      "SELECT * FROM users"
+    );
+    assert.equal(results.length, 3);
+    assert.equal(results[0].error, null);
+    assert.equal(results[1].error, null);
+    assert.equal(results[2].rows[0].age, 31);
+  });
+
+  await withDb(async (db) => {
+    // newline separation for mixed commands
+    const results = await db.sqlMulti(
+      "INSERT INTO products (name, price) VALUES ('A', 10)\nSELECT * FROM products\nDELETE FROM products WHERE name = 'A'"
+    );
+    assert.equal(results.length, 3);
+    assert.equal(results[0].error, null);
+    assert.equal(results[1].rows.length, 1);
+    assert.equal(results[2].rows[0].message, "1 row(s) deleted");
+  });
 }
 
 run()
