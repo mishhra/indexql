@@ -919,14 +919,52 @@
       });
 
       function formatError(msg) {
-        if (msg && msg.includes("match")) {
+        if (!msg) return "Unknown error";
+
+        // Division by zero
+        if (msg.includes("Division by zero")) {
+          return "Math Error: " + msg;
+        }
+
+        // Invalid math operations
+        if (msg.includes("SQRT") || msg.includes("Invalid argument")) {
+          return "Math Error: " + msg;
+        }
+
+        // Table/schema errors
+        if (msg.includes("Unknown table") || msg.includes("already exists")) {
+          return "Table Error: " + msg;
+        }
+
+        // Constraint errors (duplicate key)
+        if (msg.includes("Duplicate key") || msg.includes("ConstraintError")) {
+          return "Constraint Error: " + msg;
+        }
+
+        // DELETE without WHERE
+        if (msg.includes("DELETE without WHERE")) {
+          return "Safety Error: " + msg;
+        }
+
+        // Syntax / parse errors
+        if (
+          msg.includes("match") ||
+          msg.includes("Unsupported SQL") ||
+          msg.includes("Invalid SELECT")
+        ) {
           return (
             "Syntax Error: " +
             msg +
             "\n\nCheck your query syntax. Examples:\n  SELECT * FROM users\n  SELECT 1 + 2 AS sum\n  SELECT UPPER('hello')"
           );
         }
-        return msg;
+
+        // Unknown function
+        if (msg.includes("Unknown function")) {
+          return "Function Error: " + msg;
+        }
+
+        return "Error: " + msg;
       }
 
       // Clear editor only

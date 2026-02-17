@@ -514,9 +514,7 @@ async function run() {
     assert.equal(r4[0].product, 42);
 
     // SELECT function with literals
-    const r5 = await db
-      .sql("SELECT UPPER('hello') as greeting")
-      .exec();
+    const r5 = await db.sql("SELECT UPPER('hello') as greeting").exec();
     assert.equal(r5[0].greeting, "HELLO");
 
     // SELECT CONCAT with literals
@@ -526,9 +524,7 @@ async function run() {
     assert.equal(r6[0].msg, "hello world");
 
     // SELECT multiple expressions
-    const r7 = await db
-      .sql("SELECT 1 as a, 2 as b, 3 as c")
-      .exec();
+    const r7 = await db.sql("SELECT 1 as a, 2 as b, 3 as c").exec();
     assert.equal(r7[0].a, 1);
     assert.equal(r7[0].b, 2);
     assert.equal(r7[0].c, 3);
@@ -537,18 +533,21 @@ async function run() {
   // Multiple SELECT queries (sqlMulti)
   await withDb(async (db) => {
     const products = db.table("products");
-    await products.insert([
-      { id: 1, name: "Laptop", price: 1200 },
-      { id: 2, name: "Phone", price: 800 },
-    ]).exec();
+    await products
+      .insert([
+        { id: 1, name: "Laptop", price: 1200 },
+        { id: 2, name: "Phone", price: 800 },
+      ])
+      .exec();
 
-    await db.table("users").insert([
-      { name: "Alice", email: "alice@test", age: 30, active: true },
-    ]).exec();
+    await db
+      .table("users")
+      .insert([{ name: "Alice", email: "alice@test", age: 30, active: true }])
+      .exec();
 
     // Multi-query with newline separation
     const results = await db.sqlMulti(
-      "SELECT * FROM products\nSELECT name FROM users"
+      "SELECT * FROM products\nSELECT name FROM users",
     );
     assert.equal(results.length, 2);
     assert.equal(results[0].error, null);
@@ -559,7 +558,7 @@ async function run() {
 
     // Multi-query with semicolons
     const results2 = await db.sqlMulti(
-      "SELECT name FROM products; SELECT 1 as one"
+      "SELECT name FROM products; SELECT 1 as one",
     );
     assert.equal(results2.length, 2);
     assert.equal(results2[0].rows.length, 2);
@@ -572,7 +571,7 @@ async function run() {
 
     // Error in one query doesn't stop others
     const results4 = await db.sqlMulti(
-      "SELECT * FROM products\nSELECT * FROM nonexistent_table"
+      "SELECT * FROM products\nSELECT * FROM nonexistent_table",
     );
     assert.equal(results4.length, 2);
     assert.equal(results4[0].error, null);
@@ -582,9 +581,9 @@ async function run() {
   // ========== SQL INSERT ==========
   await withDb(async (db) => {
     // INSERT INTO ... VALUES (single row)
-    const result = await db.sql(
-      "INSERT INTO products (name, price) VALUES ('Widget', 9.99)"
-    ).exec();
+    const result = await db
+      .sql("INSERT INTO products (name, price) VALUES ('Widget', 9.99)")
+      .exec();
     assert.equal(result[0].message, "1 row(s) inserted");
     const rows = await db.sql("SELECT * FROM products").exec();
     assert.equal(rows.length, 1);
@@ -594,11 +593,15 @@ async function run() {
 
   await withDb(async (db) => {
     // INSERT INTO ... VALUES (multiple rows)
-    const result = await db.sql(
-      "INSERT INTO products (name, price) VALUES ('Laptop', 1200), ('Phone', 800), ('Tablet', 500)"
-    ).exec();
+    const result = await db
+      .sql(
+        "INSERT INTO products (name, price) VALUES ('Laptop', 1200), ('Phone', 800), ('Tablet', 500)",
+      )
+      .exec();
     assert.equal(result[0].message, "3 row(s) inserted");
-    const rows = await db.sql("SELECT * FROM products ORDER BY price ASC").exec();
+    const rows = await db
+      .sql("SELECT * FROM products ORDER BY price ASC")
+      .exec();
     assert.equal(rows.length, 3);
     assert.equal(rows[0].name, "Tablet");
     assert.equal(rows[2].name, "Laptop");
@@ -606,9 +609,11 @@ async function run() {
 
   await withDb(async (db) => {
     // INSERT INTO ... SET
-    const result = await db.sql(
-      "INSERT INTO users SET name = 'Bob', email = 'bob@test', age = 25, active = true"
-    ).exec();
+    const result = await db
+      .sql(
+        "INSERT INTO users SET name = 'Bob', email = 'bob@test', age = 25, active = true",
+      )
+      .exec();
     assert.equal(result[0].message, "1 row(s) inserted");
     const rows = await db.sql("SELECT * FROM users").exec();
     assert.equal(rows.length, 1);
@@ -619,9 +624,11 @@ async function run() {
 
   await withDb(async (db) => {
     // INSERT with null and boolean values
-    await db.sql(
-      "INSERT INTO users (name, email, age, active) VALUES ('Test', 'test@test', null, false)"
-    ).exec();
+    await db
+      .sql(
+        "INSERT INTO users (name, email, age, active) VALUES ('Test', 'test@test', null, false)",
+      )
+      .exec();
     const rows = await db.sql("SELECT * FROM users").exec();
     assert.equal(rows[0].age, null);
     assert.equal(rows[0].active, false);
@@ -629,9 +636,11 @@ async function run() {
 
   await withDb(async (db) => {
     // INSERT with nested JSON object
-    await db.sql(
-      "INSERT INTO products (name, price, meta) VALUES ('Widget', 9.99, {'color': 'red', 'weight': 150})"
-    ).exec();
+    await db
+      .sql(
+        "INSERT INTO products (name, price, meta) VALUES ('Widget', 9.99, {'color': 'red', 'weight': 150})",
+      )
+      .exec();
     const rows = await db.sql("SELECT * FROM products").exec();
     assert.equal(rows[0].name, "Widget");
     assert.deepEqual(rows[0].meta, { color: "red", weight: 150 });
@@ -639,27 +648,36 @@ async function run() {
 
   await withDb(async (db) => {
     // INSERT with nested JSON array
-    await db.sql(
-      "INSERT INTO products (name, tags) VALUES ('Gadget', ['electronics', 'sale', 'new'])"
-    ).exec();
+    await db
+      .sql(
+        "INSERT INTO products (name, tags) VALUES ('Gadget', ['electronics', 'sale', 'new'])",
+      )
+      .exec();
     const rows = await db.sql("SELECT * FROM products").exec();
     assert.deepEqual(rows[0].tags, ["electronics", "sale", "new"]);
   });
 
   await withDb(async (db) => {
     // INSERT with deeply nested object
-    await db.sql(
-      "INSERT INTO products (name, details) VALUES ('Phone', {'specs': {'ram': 8, 'storage': 256}, 'colors': ['black', 'white']})"
-    ).exec();
+    await db
+      .sql(
+        "INSERT INTO products (name, details) VALUES ('Phone', {'specs': {'ram': 8, 'storage': 256}, 'colors': ['black', 'white']})",
+      )
+      .exec();
     const rows = await db.sql("SELECT * FROM products").exec();
-    assert.deepEqual(rows[0].details, { specs: { ram: 8, storage: 256 }, colors: ["black", "white"] });
+    assert.deepEqual(rows[0].details, {
+      specs: { ram: 8, storage: 256 },
+      colors: ["black", "white"],
+    });
   });
 
   await withDb(async (db) => {
     // INSERT with array of objects
-    await db.sql(
-      "INSERT INTO products (name, variants) VALUES ('Shirt', [{'size': 'S', 'stock': 10}, {'size': 'M', 'stock': 20}])"
-    ).exec();
+    await db
+      .sql(
+        "INSERT INTO products (name, variants) VALUES ('Shirt', [{'size': 'S', 'stock': 10}, {'size': 'M', 'stock': 20}])",
+      )
+      .exec();
     const rows = await db.sql("SELECT * FROM products").exec();
     assert.equal(rows[0].variants.length, 2);
     assert.equal(rows[0].variants[0].size, "S");
@@ -668,32 +686,44 @@ async function run() {
 
   await withDb(async (db) => {
     // INSERT SET with nested JSON
-    await db.sql(
-      "INSERT INTO products SET name = 'Laptop', specs = {'cpu': 'i7', 'ram': 16}"
-    ).exec();
+    await db
+      .sql(
+        "INSERT INTO products SET name = 'Laptop', specs = {'cpu': 'i7', 'ram': 16}",
+      )
+      .exec();
     const rows = await db.sql("SELECT * FROM products").exec();
     assert.deepEqual(rows[0].specs, { cpu: "i7", ram: 16 });
   });
 
   // ========== SQL UPDATE ==========
   await withDb(async (db) => {
-    await db.table("users").insert([
-      { name: "Alice", email: "alice@test", age: 30, active: true },
-      { name: "Bob", email: "bob@test", age: 25, active: true },
-    ]).exec();
+    await db
+      .table("users")
+      .insert([
+        { name: "Alice", email: "alice@test", age: 30, active: true },
+        { name: "Bob", email: "bob@test", age: 25, active: true },
+      ])
+      .exec();
 
     // UPDATE with WHERE
-    const result = await db.sql("UPDATE users SET age = 31 WHERE name = 'Alice'").exec();
+    const result = await db
+      .sql("UPDATE users SET age = 31 WHERE name = 'Alice'")
+      .exec();
     assert.equal(result[0].message, "1 row(s) updated");
-    const rows = await db.sql("SELECT * FROM users WHERE name = 'Alice'").exec();
+    const rows = await db
+      .sql("SELECT * FROM users WHERE name = 'Alice'")
+      .exec();
     assert.equal(rows[0].age, 31);
   });
 
   await withDb(async (db) => {
-    await db.table("users").insert([
-      { name: "Alice", email: "alice@test", age: 30, active: true },
-      { name: "Bob", email: "bob@test", age: 25, active: true },
-    ]).exec();
+    await db
+      .table("users")
+      .insert([
+        { name: "Alice", email: "alice@test", age: 30, active: true },
+        { name: "Bob", email: "bob@test", age: 25, active: true },
+      ])
+      .exec();
 
     // UPDATE without WHERE (all rows)
     const result = await db.sql("UPDATE users SET active = false").exec();
@@ -703,12 +733,17 @@ async function run() {
   });
 
   await withDb(async (db) => {
-    await db.table("users").insert([
-      { name: "Alice", email: "alice@test", age: 30, active: true },
-    ]).exec();
+    await db
+      .table("users")
+      .insert([{ name: "Alice", email: "alice@test", age: 30, active: true }])
+      .exec();
 
     // UPDATE multiple columns
-    await db.sql("UPDATE users SET name = 'Alicia', age = 31 WHERE email = 'alice@test'").exec();
+    await db
+      .sql(
+        "UPDATE users SET name = 'Alicia', age = 31 WHERE email = 'alice@test'",
+      )
+      .exec();
     const rows = await db.sql("SELECT * FROM users").exec();
     assert.equal(rows[0].name, "Alicia");
     assert.equal(rows[0].age, 31);
@@ -716,10 +751,13 @@ async function run() {
 
   // ========== SQL DELETE ==========
   await withDb(async (db) => {
-    await db.table("users").insert([
-      { name: "Alice", email: "alice@test", age: 30, active: true },
-      { name: "Bob", email: "bob@test", age: 25, active: true },
-    ]).exec();
+    await db
+      .table("users")
+      .insert([
+        { name: "Alice", email: "alice@test", age: 30, active: true },
+        { name: "Bob", email: "bob@test", age: 25, active: true },
+      ])
+      .exec();
 
     // DELETE with WHERE
     const result = await db.sql("DELETE FROM users WHERE name = 'Bob'").exec();
@@ -730,14 +768,17 @@ async function run() {
   });
 
   await withDb(async (db) => {
-    await db.table("users").insert([
-      { name: "Alice", email: "alice@test", age: 30, active: true },
-      { name: "Bob", email: "bob@test", age: 25, active: true },
-    ]).exec();
+    await db
+      .table("users")
+      .insert([
+        { name: "Alice", email: "alice@test", age: 30, active: true },
+        { name: "Bob", email: "bob@test", age: 25, active: true },
+      ])
+      .exec();
 
-    // DELETE without WHERE (all rows)
-    const result = await db.sql("DELETE FROM users").exec();
-    assert.equal(result[0].message, "2 row(s) deleted");
+    // DELETE all rows — use TRUNCATE since DELETE without WHERE is now blocked
+    const result = await db.sql("TRUNCATE users").exec();
+    assert.equal(result[0].message, "Table users truncated");
     const rows = await db.sql("SELECT * FROM users").exec();
     assert.equal(rows.length, 0);
   });
@@ -767,7 +808,9 @@ async function run() {
 
   await withDb(async (db) => {
     // CREATE TABLE
-    const result = await db.sql("CREATE TABLE tasks (id PRIMARY KEY, title, done)").exec();
+    const result = await db
+      .sql("CREATE TABLE tasks (id PRIMARY KEY, title, done)")
+      .exec();
     assert.equal(result[0].message, "Table tasks created");
 
     // Should appear in SHOW TABLES
@@ -775,7 +818,9 @@ async function run() {
     assert.ok(tables.some((t) => t.table_name === "tasks"));
 
     // Should be usable
-    await db.sql("INSERT INTO tasks (title, done) VALUES ('Buy milk', false)").exec();
+    await db
+      .sql("INSERT INTO tasks (title, done) VALUES ('Buy milk', false)")
+      .exec();
     const rows = await db.sql("SELECT * FROM tasks").exec();
     assert.equal(rows.length, 1);
     assert.equal(rows[0].title, "Buy milk");
@@ -783,7 +828,9 @@ async function run() {
 
   await withDb(async (db) => {
     // CREATE TABLE IF NOT EXISTS
-    const result = await db.sql("CREATE TABLE IF NOT EXISTS users (id, name)").exec();
+    const result = await db
+      .sql("CREATE TABLE IF NOT EXISTS users (id, name)")
+      .exec();
     assert.equal(result[0].message, "Table users already exists");
   });
 
@@ -804,10 +851,13 @@ async function run() {
 
   await withDb(async (db) => {
     // TRUNCATE TABLE
-    await db.table("users").insert([
-      { name: "Alice", email: "alice@test", age: 30, active: true },
-      { name: "Bob", email: "bob@test", age: 25, active: false },
-    ]).exec();
+    await db
+      .table("users")
+      .insert([
+        { name: "Alice", email: "alice@test", age: 30, active: true },
+        { name: "Bob", email: "bob@test", age: 25, active: false },
+      ])
+      .exec();
 
     let rows = await db.sql("SELECT * FROM users").exec();
     assert.equal(rows.length, 2);
@@ -821,9 +871,10 @@ async function run() {
 
   await withDb(async (db) => {
     // TRUNCATE without TABLE keyword
-    await db.table("products").insert([
-      { name: "Widget", price: 10 },
-    ]).exec();
+    await db
+      .table("products")
+      .insert([{ name: "Widget", price: 10 }])
+      .exec();
 
     await db.sql("TRUNCATE products").exec();
     const rows = await db.sql("SELECT * FROM products").exec();
@@ -834,7 +885,7 @@ async function run() {
   await withDb(async (db) => {
     // INSERT + SELECT via sqlMulti
     const results = await db.sqlMulti(
-      "INSERT INTO products (name, price) VALUES ('Laptop', 1200); SELECT * FROM products"
+      "INSERT INTO products (name, price) VALUES ('Laptop', 1200); SELECT * FROM products",
     );
     assert.equal(results.length, 2);
     assert.equal(results[0].error, null);
@@ -847,8 +898,8 @@ async function run() {
     // INSERT + UPDATE + SELECT via sqlMulti
     const results = await db.sqlMulti(
       "INSERT INTO users (name, email, age, active) VALUES ('Alice', 'a@t', 30, true);\n" +
-      "UPDATE users SET age = 31 WHERE name = 'Alice';\n" +
-      "SELECT * FROM users"
+        "UPDATE users SET age = 31 WHERE name = 'Alice';\n" +
+        "SELECT * FROM users",
     );
     assert.equal(results.length, 3);
     assert.equal(results[0].error, null);
@@ -859,7 +910,7 @@ async function run() {
   await withDb(async (db) => {
     // newline separation for mixed commands
     const results = await db.sqlMulti(
-      "INSERT INTO products (name, price) VALUES ('A', 10)\nSELECT * FROM products\nDELETE FROM products WHERE name = 'A'"
+      "INSERT INTO products (name, price) VALUES ('A', 10)\nSELECT * FROM products\nDELETE FROM products WHERE name = 'A'",
     );
     assert.equal(results.length, 3);
     assert.equal(results[0].error, null);
@@ -872,41 +923,51 @@ async function run() {
     await seed(db);
 
     // Single-line comment with --
-    const r1 = await db.sql("-- this is a comment\nSELECT * FROM users LIMIT 2").exec();
+    const r1 = await db
+      .sql("-- this is a comment\nSELECT * FROM users LIMIT 2")
+      .exec();
     assert.equal(r1.length, 2);
 
     // Inline single-line comment
-    const r2 = await db.sql("SELECT * FROM users -- get all users\nLIMIT 3").exec();
+    const r2 = await db
+      .sql("SELECT * FROM users -- get all users\nLIMIT 3")
+      .exec();
     assert.equal(r2.length, 3);
 
     // Multi-line comment /* ... */
-    const r3 = await db.sql("/* fetch users */ SELECT * FROM users LIMIT 1").exec();
+    const r3 = await db
+      .sql("/* fetch users */ SELECT * FROM users LIMIT 1")
+      .exec();
     assert.equal(r3.length, 1);
 
     // Multi-line comment spanning lines
-    const r4 = await db.sql(
-      "/*\n * Get user data\n * with a limit\n */\nSELECT * FROM users LIMIT 2"
-    ).exec();
+    const r4 = await db
+      .sql(
+        "/*\n * Get user data\n * with a limit\n */\nSELECT * FROM users LIMIT 2",
+      )
+      .exec();
     assert.equal(r4.length, 2);
 
     // Comment inside query
-    const r5 = await db.sql(
-      "SELECT * FROM users WHERE /* only adults */ age >= 18 LIMIT 5"
-    ).exec();
+    const r5 = await db
+      .sql("SELECT * FROM users WHERE /* only adults */ age >= 18 LIMIT 5")
+      .exec();
     assert.ok(r5.every((r) => r.age >= 18));
 
     // Comments shouldn't strip inside single-quoted strings
-    const r6 = await db.sql(
-      "INSERT INTO products (name, price) VALUES ('item -- special', 10)"
-    ).exec();
+    const r6 = await db
+      .sql("INSERT INTO products (name, price) VALUES ('item -- special', 10)")
+      .exec();
     assert.equal(r6[0].message, "1 row(s) inserted");
-    const check = await db.sql("SELECT * FROM products WHERE name = 'item -- special'").exec();
+    const check = await db
+      .sql("SELECT * FROM products WHERE name = 'item -- special'")
+      .exec();
     assert.equal(check.length, 1);
     assert.equal(check[0].name, "item -- special");
 
     // Multiple queries with comments via sqlMulti
     const results = await db.sqlMulti(
-      "-- first query\nSELECT 1 as one;\n-- second query\nSELECT 2 as two"
+      "-- first query\nSELECT 1 as one;\n-- second query\nSELECT 2 as two",
     );
     assert.equal(results.length, 2);
     assert.equal(results[0].rows[0].one, 1);
@@ -914,10 +975,109 @@ async function run() {
 
     // Comment-only lines should be stripped
     const results2 = await db.sqlMulti(
-      "SELECT 1 as x;\n-- this is just a comment\n/* another comment */;"
+      "SELECT 1 as x;\n-- this is just a comment\n/* another comment */;",
     );
     assert.equal(results2.length, 1);
     assert.equal(results2[0].rows[0].x, 1);
+  });
+
+  // ── Error raising & handling ──
+  await withDb(async (db) => {
+    // Division by zero throws
+    await assert.rejects(() => db.sql("SELECT 1/0").exec(), {
+      message: "Division by zero",
+    });
+
+    // Division by zero in complex expression
+    await assert.rejects(() => db.sql("SELECT 1+2*3/0").exec(), {
+      message: "Division by zero",
+    });
+
+    // Modulo by zero throws
+    await assert.rejects(() => db.sql("SELECT 10 % 0").exec(), {
+      message: "Division by zero",
+    });
+
+    // SQRT of negative throws
+    await assert.rejects(
+      () => db.sql("SELECT SQRT(-4)").exec(),
+      (err) => err.message.includes("SQRT") && err.message.includes("negative"),
+    );
+
+    // Division by zero captured in sqlMulti (doesn't crash, returns error)
+    const results = await db.sqlMulti("SELECT 1/0");
+    assert.equal(results.length, 1);
+    assert.equal(results[0].error, "Division by zero");
+    assert.equal(results[0].rows, null);
+
+    // Valid math still works
+    const r1 = await db.sql("SELECT 10/2 AS half").exec();
+    assert.equal(r1[0].half, 5);
+
+    const r2 = await db.sql("SELECT 10 % 3 AS remainder").exec();
+    assert.equal(r2[0].remainder, 1);
+
+    // Unknown function throws (during exec — IndependentQueryBuilder)
+    await assert.rejects(
+      () => db.sql("SELECT FAKEFUNC(1)").exec(),
+      (err) => err.message.includes("Unknown function"),
+    );
+
+    // Unknown table throws (sync — thrown during table lookup)
+    assert.throws(
+      () => db.sql("SELECT * FROM nonexistent"),
+      (err) => err.message.includes("Unknown table"),
+    );
+
+    // Unsupported SQL command throws (sync — thrown during parsing)
+    assert.throws(
+      () => db.sql("ALTER TABLE users ADD COLUMN foo"),
+      (err) => err.message.includes("Unsupported SQL"),
+    );
+
+    // DELETE without WHERE throws safety error (async — thrown during exec)
+    await assert.rejects(
+      () => db.sql("DELETE FROM users").exec(),
+      (err) => err.message.includes("DELETE without WHERE"),
+    );
+
+    // DROP TABLE for nonexistent table throws (async — thrown during exec)
+    await assert.rejects(
+      () => db.sql("DROP TABLE nonexistent").exec(),
+      (err) => err.message.includes("Unknown table"),
+    );
+
+    // DROP TABLE IF EXISTS for nonexistent table does NOT throw
+    const dropResult = await db.sql("DROP TABLE IF EXISTS nonexistent").exec();
+    assert.equal(dropResult[0].message, "Table nonexistent does not exist");
+
+    // Duplicate key error (insert same id twice)
+    await db
+      .sql("INSERT INTO users (id, email, age) VALUES (9999, 'dup@test', 25)")
+      .exec();
+    await assert.rejects(
+      () =>
+        db
+          .sql(
+            "INSERT INTO users (id, email, age) VALUES (9999, 'dup2@test', 30)",
+          )
+          .exec(),
+      (err) => err.message.includes("Duplicate key"),
+    );
+
+    // Null propagation in math — null field yields null, not 0
+    const r3 = await db.sql("SELECT 5 + 0 AS five").exec();
+    assert.equal(r3[0].five, 5);
+
+    // Multiple errors in sqlMulti — each captured independently
+    const multi = await db.sqlMulti(
+      "SELECT 1/0;\nSELECT 1+1 AS two;\nSELECT 5%0",
+    );
+    assert.equal(multi.length, 3);
+    assert.notEqual(multi[0].error, null); // 1/0 fails
+    assert.equal(multi[1].error, null); // 1+1 succeeds
+    assert.equal(multi[1].rows[0].two, 2);
+    assert.notEqual(multi[2].error, null); // 5%0 fails
   });
 }
 

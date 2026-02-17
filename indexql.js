@@ -793,7 +793,13 @@ function serializeFunc(func) {
     const infixMap = { add: "+", sub: "-", mul: "*", div: "/", mod: "%" };
     const sym = infixMap[func.op];
     if (sym && func.args.length === 2) {
-      return serializeArg(func.args[0]) + " " + sym + " " + serializeArg(func.args[1]);
+      return (
+        serializeArg(func.args[0]) +
+        " " +
+        sym +
+        " " +
+        serializeArg(func.args[1])
+      );
     }
     return func.op + "(" + func.args.map(serializeArg).join(", ") + ")";
   }
@@ -811,7 +817,7 @@ function evaluateFunc(row, func) {
   } else if (func.type === "string") {
     return evaluateStringFunc(row, func);
   }
-  return undefined;
+  throw new Error("Unknown function type: " + func.type);
 }
 
 function evaluateMathFunc(row, func) {
@@ -829,33 +835,57 @@ function evaluateMathFunc(row, func) {
     value = resolved !== undefined ? resolved : Number(value);
   }
 
-  if (value === undefined || value === null) return undefined;
+  if (value === undefined || value === null) return null;
   const num = Number(value);
-  if (isNaN(num)) return undefined;
+  if (isNaN(num)) return null;
 
   // Resolve the second argument (could be a nested func, field, or literal)
   const resolveRight = (arg) => {
-    if (arg && arg.__func) return Number(evaluateFunc(row, arg));
+    if (arg && arg.__func) {
+      const val = evaluateFunc(row, arg);
+      if (val === null || val === undefined) return null;
+      const n = Number(val);
+      return isNaN(n) ? null : n;
+    }
     if (typeof arg === "number") return arg;
     const resolved = resolveField(row, arg);
-    return resolved !== undefined ? Number(resolved) : Number(arg);
+    const raw = resolved !== undefined ? resolved : arg;
+    if (raw === null || raw === undefined) return null;
+    const n = Number(raw);
+    return isNaN(n) ? null : n;
   };
 
   switch (op) {
-    case "add":
-      return num + resolveRight(args[1]);
-    case "sub":
-      return num - resolveRight(args[1]);
-    case "mul":
-      return num * resolveRight(args[1]);
+    case "add": {
+      const r = resolveRight(args[1]);
+      return r === null ? null : num + r;
+    }
+    case "sub": {
+      const r = resolveRight(args[1]);
+      return r === null ? null : num - r;
+    }
+    case "mul": {
+      const r = resolveRight(args[1]);
+      return r === null ? null : num * r;
+    }
     case "div": {
       const d = resolveRight(args[1]);
-      return d === 0 ? null : num / d;
+      if (d === null) return null;
+      if (d === 0) throw new Error("Division by zero");
+      return num / d;
     }
-    case "mod":
-      return num % resolveRight(args[1]);
-    case "pow":
-      return Math.pow(num, resolveRight(args[1]));
+    case "mod": {
+      const d = resolveRight(args[1]);
+      if (d === null) return null;
+      if (d === 0) throw new Error("Division by zero");
+      return num % d;
+    }
+    case "pow": {
+      const r = resolveRight(args[1]);
+      if (r === null) return null;
+      const result = Math.pow(num, r);
+      return isNaN(result) || !isFinite(result) ? null : result;
+    }
     case "abs":
       return Math.abs(num);
     case "ceil":
@@ -867,10 +897,12 @@ function evaluateMathFunc(row, func) {
       const factor = Math.pow(10, digits);
       return Math.round(num * factor) / factor;
     }
-    case "sqrt":
+    case "sqrt": {
+      if (num < 0) throw new Error("Invalid argument for SQRT: negative value");
       return Math.sqrt(num);
+    }
     default:
-      return undefined;
+      return null;
   }
 }
 
@@ -947,8 +979,12 @@ function evaluateStringFunc(row, func) {
     case "replaceAll": {
       const str = resolveArg(args[0]);
       if (str === null || str === undefined) return undefined;
-      const searchRegex = new RegExp(args[1], "g");
-      return String(str).replace(searchRegex, args[2]);
+      try {
+        const searchRegex = new RegExp(args[1], "g");
+        return String(str).replace(searchRegex, args[2]);
+      } catch (e) {
+        throw new Error("REPLACE: invalid pattern '" + args[1] + "'");
+      }
     }
     case "split": {
       const str = resolveArg(args[0]);
@@ -1441,12 +1477,15 @@ class SqlCommandBuilder {
   }
 
   async exec() {
-    const db = this._dbOrTx instanceof TxContext ? this._dbOrTx._db : this._dbOrTx;
+    const db =
+      this._dbOrTx instanceof TxContext ? this._dbOrTx._db : this._dbOrTx;
     const p = this._params;
 
     switch (this._command) {
       case "show_tables": {
-        const tables = Object.keys(db._schema.tables).map((t) => ({ table_name: t }));
+        const tables = Object.keys(db._schema.tables).map((t) => ({
+          table_name: t,
+        }));
         return tables;
       }
 
@@ -1457,7 +1496,11 @@ class SqlCommandBuilder {
         }
         const def = db._schema.tables[tableName];
         const cols = [];
-        cols.push({ column: def.keyPath || "id", type: "keyPath", autoIncrement: !!def.autoIncrement });
+        cols.push({
+          column: def.keyPath || "id",
+          type: "keyPath",
+          autoIncrement: !!def.autoIncrement,
+        });
         const indexes = def.indexes || {};
         for (const [name, idx] of Object.entries(indexes)) {
           cols.push({ column: name, type: "index", unique: !!idx.unique });
@@ -1528,14 +1571,27 @@ class SqlCommandBuilder {
         if (!db._schema.tables[tableName]) {
           throw new Error("Unknown table: " + tableName);
         }
+        if (!p.rows || p.rows.length === 0) {
+          throw new Error("INSERT requires at least one row");
+        }
         const tx = db._db.transaction([tableName], "readwrite");
         const store = tx.objectStore(tableName);
         const ids = [];
-        for (const row of p.rows) {
-          const id = await promisifyRequest(store.add(row));
-          ids.push(id);
+        try {
+          for (const row of p.rows) {
+            const id = await promisifyRequest(store.add(row));
+            ids.push(id);
+          }
+          await awaitTxDone(tx);
+        } catch (err) {
+          if (err.name === "ConstraintError") {
+            throw new Error(
+              "Duplicate key: a record with that key already exists in " +
+                tableName,
+            );
+          }
+          throw err;
         }
-        await awaitTxDone(tx);
         return [{ message: ids.length + " row(s) inserted", ids }];
       }
 
@@ -1543,6 +1599,9 @@ class SqlCommandBuilder {
         const tableName = p.table;
         if (!db._schema.tables[tableName]) {
           throw new Error("Unknown table: " + tableName);
+        }
+        if (!p.patch || Object.keys(p.patch).length === 0) {
+          throw new Error("UPDATE requires at least one SET assignment");
         }
         const tx = db._db.transaction([tableName], "readwrite");
         const store = tx.objectStore(tableName);
@@ -1564,6 +1623,13 @@ class SqlCommandBuilder {
         if (!db._schema.tables[tableName]) {
           throw new Error("Unknown table: " + tableName);
         }
+        if (!p.whereExpr) {
+          throw new Error(
+            "DELETE without WHERE would remove all rows. Use TRUNCATE " +
+              tableName +
+              " instead",
+          );
+        }
         const tx = db._db.transaction([tableName], "readwrite");
         const store = tx.objectStore(tableName);
         const whereExpr = p.whereExpr;
@@ -1571,7 +1637,7 @@ class SqlCommandBuilder {
         let count = 0;
         const keyPath = store.keyPath || "id";
         for (const row of allRows) {
-          if (whereExpr && !evaluateExpression(row, whereExpr)) continue;
+          if (!evaluateExpression(row, whereExpr)) continue;
           await promisifyRequest(store.delete(row[keyPath]));
           count++;
         }
@@ -1634,7 +1700,11 @@ function stripSqlComments(sql) {
     // Multi-line comment: /* ... */
     if (ch === "/" && i + 1 < sql.length && sql[i + 1] === "*") {
       i += 2;
-      while (i < sql.length && !(sql[i] === "*" && i + 1 < sql.length && sql[i + 1] === "/")) i++;
+      while (
+        i < sql.length &&
+        !(sql[i] === "*" && i + 1 < sql.length && sql[i + 1] === "/")
+      )
+        i++;
       i += 2; // skip closing */
       result += " "; // replace comment with space to avoid token merge
       continue;
@@ -1651,13 +1721,20 @@ function splitSqlQueries(sql) {
   const text = stripSqlComments(sql).trim();
 
   // First split by semicolons
-  let parts = text.split(/;/).map((s) => s.trim()).filter((s) => s.length > 0);
+  let parts = text
+    .split(/;/)
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0);
 
   // Then split any remaining parts that contain multiple statements on separate lines
-  const stmtKeywords = /\n(?=\s*(?:select|insert|update|delete|create|drop|truncate|show|alter|describe|explain)\b)/i;
+  const stmtKeywords =
+    /\n(?=\s*(?:select|insert|update|delete|create|drop|truncate|show|alter|describe|explain)\b)/i;
   const queries = [];
   for (const part of parts) {
-    const subParts = part.split(stmtKeywords).map((s) => s.trim()).filter((s) => s.length > 0);
+    const subParts = part
+      .split(stmtKeywords)
+      .map((s) => s.trim())
+      .filter((s) => s.length > 0);
     queries.push(...subParts);
   }
 
@@ -1695,15 +1772,19 @@ function parseSqlLiteral(str) {
   if (/^true$/i.test(trimmed)) return true;
   if (/^false$/i.test(trimmed)) return false;
   // JSON object or array
-  if ((trimmed[0] === "{" && trimmed[trimmed.length - 1] === "}") ||
-      (trimmed[0] === "[" && trimmed[trimmed.length - 1] === "]")) {
+  if (
+    (trimmed[0] === "{" && trimmed[trimmed.length - 1] === "}") ||
+    (trimmed[0] === "[" && trimmed[trimmed.length - 1] === "]")
+  ) {
     try {
       // SQL uses single quotes for strings — convert to double quotes for JSON parse
       const jsonStr = trimmed.replace(/'([^']*)'/g, '"$1"');
       return JSON.parse(jsonStr);
     } catch (e) {
       // fallback: try direct parse in case it's already valid JSON
-      try { return JSON.parse(trimmed); } catch (_) {}
+      try {
+        return JSON.parse(trimmed);
+      } catch (_) {}
     }
   }
   // number
@@ -1722,7 +1803,11 @@ function parseValuesRows(columns, valuesStr) {
     const vals = splitCsv(group);
     if (vals.length !== columns.length) {
       throw new Error(
-        "Column count (" + columns.length + ") doesn't match value count (" + vals.length + ")",
+        "Column count (" +
+          columns.length +
+          ") doesn't match value count (" +
+          vals.length +
+          ")",
       );
     }
     const row = {};
@@ -1784,7 +1869,9 @@ function parseSql(dbOrTx, sql) {
 
   // ---- SHOW COLUMNS FROM tableName / DESCRIBE tableName ----
   {
-    const m = text.match(/^(?:show\s+columns\s+from|describe|desc)\s+([a-zA-Z0-9_]+)$/i);
+    const m = text.match(
+      /^(?:show\s+columns\s+from|describe|desc)\s+([a-zA-Z0-9_]+)$/i,
+    );
     if (m) {
       return new SqlCommandBuilder(dbOrTx, "show_columns", { table: m[1] });
     }
@@ -1857,7 +1944,10 @@ function parseSql(dbOrTx, sql) {
       const colList = splitCsv(m[2]).map((c) => c.trim());
       const valuesStr = m[3];
       const rows = parseValuesRows(colList, valuesStr);
-      return new SqlCommandBuilder(dbOrTx, "insert", { table: tableName, rows });
+      return new SqlCommandBuilder(dbOrTx, "insert", {
+        table: tableName,
+        rows,
+      });
     }
 
     // INSERT INTO table SET col1 = val1, col2 = val2
@@ -1867,7 +1957,10 @@ function parseSql(dbOrTx, sql) {
     if (mSet) {
       const tableName = mSet[1];
       const row = parseSetClause(mSet[2]);
-      return new SqlCommandBuilder(dbOrTx, "insert", { table: tableName, rows: [row] });
+      return new SqlCommandBuilder(dbOrTx, "insert", {
+        table: tableName,
+        rows: [row],
+      });
     }
   }
 
@@ -1880,7 +1973,11 @@ function parseSql(dbOrTx, sql) {
       const tableName = m[1];
       const patch = parseSetClause(m[2]);
       const whereExpr = m[3] ? parseWhereExpression(m[3]) : null;
-      return new SqlCommandBuilder(dbOrTx, "update", { table: tableName, patch, whereExpr });
+      return new SqlCommandBuilder(dbOrTx, "update", {
+        table: tableName,
+        patch,
+        whereExpr,
+      });
     }
   }
 
@@ -1892,7 +1989,10 @@ function parseSql(dbOrTx, sql) {
     if (m) {
       const tableName = m[1];
       const whereExpr = m[2] ? parseWhereExpression(m[2]) : null;
-      return new SqlCommandBuilder(dbOrTx, "delete", { table: tableName, whereExpr });
+      return new SqlCommandBuilder(dbOrTx, "delete", {
+        table: tableName,
+        whereExpr,
+      });
     }
   }
 
@@ -1909,7 +2009,11 @@ function parseSql(dbOrTx, sql) {
 
   const match = text.match(/^select\s+([\s\S]+?)\s+from\s+([a-zA-Z0-9_]+)\s*/i);
   if (!match) {
-    throw new Error("Unsupported SQL command: " + text.split(/\s+/)[0]);
+    const keyword = text.split(/\s+/)[0].toUpperCase();
+    if (/^SELECT$/i.test(keyword)) {
+      throw new Error("Invalid SELECT syntax. Expected: SELECT ... FROM table");
+    }
+    throw new Error("Unsupported SQL command: " + keyword);
   }
 
   const selectList = match[1];
