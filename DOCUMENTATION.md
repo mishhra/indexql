@@ -12,7 +12,7 @@ import { IndexQL } from "./indexql.js";
 
 ## Quick Start
 
-```js
+````js
 const db = await IndexQL.open("demo", {
   tables: {
     users: {
@@ -27,24 +27,51 @@ const db = await IndexQL.open("demo", {
 });
 
 const users = db.table("users");
-const u = users.c;
-const k = db.k;
+````
 
-const rows = await users
-  .select([u.id, u.name])
-  .where(u.age, k.gte, 18)
-  .orderBy(u.age, k.desc)
-  .limit(10)
-  .exec();
-```
+# IndexQL: Complete Documentation & Tutorial
 
-## Schema
+## Table of Contents
 
-`IndexQL.open(name, schema)` expects a schema with `tables`. `version` is optional and defaults to 1.
+1. [Introduction](#introduction)
+2. [Installation & Setup](#installation--setup)
+3. [Schema Definition](#schema-definition)
+4. [Core API Overview](#core-api-overview)
+5. [Column References & Keywords](#column-references--keywords)
+6. [Query Builder: Fluent API](#query-builder-fluent-api)
+7. [SQL Parser: Syntax & Features](#sql-parser-syntax--features)
+8. [Supported Functions](#supported-functions)
+9. [Nested JSON & Arrays](#nested-json--arrays)
+10. [Transactions](#transactions)
+11. [Dummy Data Seeding](#dummy-data-seeding)
+12. [Error Handling & Edge Cases](#error-handling--edge-cases)
+13. [Reference: All Keywords, Operators, and Functions](#reference-all-keywords-operators-and-functions)
+14. [Advanced Usage & Notes](#advanced-usage--notes)
+
+---
+
+## 1. Introduction
+
+IndexQL brings SQL-like querying and a fluent API to IndexedDB, supporting:
+- SELECT/INSERT/UPDATE/DELETE/DDL (CREATE, DROP, SHOW, TRUNCATE)
+- Joins, grouping, aggregates, math/string functions
+- Nested JSON fields, arrays, dot/arrow notation
+- ACID transactions, dummy data seeding, error handling
+
+---
+
+## 2. Installation & Setup
+
+Import in browser or Node.js:
+
+```js
+import { IndexQL } from "./indexql.js";
+````
+
+Open a database (empty schema allowed):
 
 ```js
 const db = await IndexQL.open("demo", {
-  version: 2,
   tables: {
     users: {
       keyPath: "id",
@@ -54,78 +81,573 @@ const db = await IndexQL.open("demo", {
         age: {},
       },
     },
+    products: {
+      keyPath: "id",
+      autoIncrement: true,
+    },
   },
 });
 ```
 
-## Core API
+You can also open with an empty schema and create tables later via SQL:
+
+```js
+const db = await IndexQL.open("playground", { tables: {} });
+```
+
+---
+
+## 3. Schema Definition
+
+Each table in `tables` can specify:
+
+- `keyPath`: Primary key field (string)
+- `autoIncrement`: Boolean (true/false)
+- `indexes`: Object of `{ field: { unique?: true, multiEntry?: true } }`
+
+Example:
+
+```js
+tables: {
+  users: {
+    keyPath: "id",
+    autoIncrement: true,
+    indexes: {
+      email: { unique: true },
+      age: {},
+    },
+  },
+  posts: {
+    keyPath: "postId",
+    autoIncrement: true,
+    indexes: {
+      userId: {},
+    },
+  },
+}
+```
+
+You can also create/drop tables at runtime using SQL DDL commands.
+
+---
+
+## 4. Core API Overview
 
 ### IndexQL
 
-- `IndexQL.open(name, schema)`
-- `db.table(name)`
-- `db.sql(query)`
-- `db.cols(tableName)`
-- `db.transaction(storeNames, mode, fn)`
-- `db.populateDummy(options)`
-- `db.close()`
+- `IndexQL.open(name, schema)` — Open or create a database
+- `db.table(name)` — Get a table instance
+- `db.sql(query)` — Parse SQL to a query builder
+- `db.sqlMulti(query)` — Run multiple SQL statements
+- `db.cols(tableName)` — Get a column proxy for a table
+- `db.k` — Keyword object (operators, join types, etc.)
+- `db.fn` — All math, string, and aggregate functions
+- `db.transaction(storeNames, mode, fn)` — ACID transaction
+- `db.populateDummy(options)` — Seed with DummyJSON data
+- `db.close()` — Close the database
 
 ### Table
 
-- `table.c` (column reference proxy)
-- `table.k` (keyword proxy, same as `db.k`)
-- `table.fn` (aggregate helpers, same as `db.fn`)
-- `table.cols(tableName)`
-- `table.select(fields)`
-- `table.insert(data)`
-- `table.update(data)`
-- `table.delete()`
+- `table.c` — Column proxy (unqualified)
+- `table.k` — Keywords (same as `db.k`)
+- `table.fn` — Functions (same as `db.fn`)
+- `table.cols(tableName)` — Qualified column proxy
+- `table.select(fields)` — Start SELECT query
+- `table.insert(data)` — Start INSERT query
+- `table.update(data)` — Start UPDATE query
+- `table.delete()` — Start DELETE query
 
-### QueryBuilder (returned from select/insert/update/delete)
+### QueryBuilder (from select/insert/update/delete)
 
-- `select(fields)`
-- `where(field, op, value)`
-- `orWhere(field, op, value)`
-- `join(tableName, leftField, rightField, type)`
-- `groupBy(fields)`
-- `aggregate(spec)`
-- `having(field, op, value)`
-- `orHaving(field, op, value)`
-- `orderBy(field, direction)`
-- `limit(count)`
-- `offset(count)`
-- `insert(data)`
-- `update(data)`
-- `exec()`
+- `select(fields)` — Specify fields (array or null for \*)
+- `where(field, op, value)` — Add WHERE clause
+- `orWhere(field, op, value)` — OR-combined WHERE
+- `join(table, leftField, rightField, type)` — Add JOIN
+- `groupBy(fields)` — GROUP BY
+- `aggregate(spec)` — Aggregates (object of { alias: fn })
+- `having(field, op, value)` — HAVING clause
+- `orHaving(field, op, value)` — OR-combined HAVING
+- `orderBy(field, direction)` — ORDER BY
+- `limit(count)` — LIMIT
+- `offset(count)` — OFFSET
+- `insert(data)` — For INSERT
+- `update(data)` — For UPDATE
+- `exec()` — Execute query
 
-## Column References
+---
 
-Use column proxies instead of strings:
+## 5. Column References & Keywords
+
+### Column Proxies
+
+Use column proxies for type-safe, error-proof field references:
 
 ```js
 const users = db.table("users");
 const u = users.c;
 const k = db.k;
-
 await users.select([u.id, u.name]).where(u.age, k.gte, 18).exec();
 ```
 
-Use qualified columns for joins:
+For joins, use qualified columns:
 
 ```js
 const orders = db.table("orders");
 const o = orders.c;
 const usersCols = db.cols("users");
-
 await orders
   .select([usersCols.name, o.amount])
   .join("users", o.userId, usersCols.id, k.left)
   .exec();
 ```
 
-## Keywords
+### Keywords
 
-`db.k` exposes keyword objects so you do not need string literals:
+`db.k` exposes all operators, join types, and boolean keywords:
+
+| Name    | Value     | Purpose          |
+| ------- | --------- | ---------------- |
+| asc     | "asc"     | Sort ascending   |
+| desc    | "desc"    | Sort descending  |
+| inner   | "inner"   | Inner join       |
+| left    | "left"    | Left join        |
+| right   | "right"   | Right join       |
+| and     | "and"     | Logical AND      |
+| or      | "or"      | Logical OR       |
+| like    | "like"    | Pattern matching |
+| between | "between" | Range operator   |
+| is      | "is"      | IS NULL          |
+| isNot   | "is not"  | IS NOT NULL      |
+| not     | "not"     | Negation         |
+| null    | null      | Null literal     |
+| eq      | "="       | Equality         |
+| ne      | "!="      | Not equal        |
+| gt      | ">"       | Greater than     |
+| gte     | ">="      | Greater or equal |
+| lt      | "<"       | Less than        |
+| lte     | "<="      | Less or equal    |
+| in      | "in"      | IN list          |
+
+---
+
+## 6. Query Builder: Fluent API
+
+### SELECT
+
+```js
+const rows = await users
+  .select([u.id, u.name])
+  .where(u.age, k.between, [18, 65])
+  .orWhere(u.email, k.like, "%@dev")
+  .orderBy(u.age, k.desc)
+  .limit(10)
+  .offset(0)
+  .exec();
+```
+
+### INSERT
+
+```js
+await users.insert({ name: "Ada" }).exec();
+await users.insert([{ name: "Bob" }, { name: "Carol" }]).exec();
+```
+
+### UPDATE
+
+```js
+await users.update({ active: true }).where(u.age, k.gte, 18).exec();
+```
+
+### DELETE
+
+```js
+await users.delete().where(u.age, k.lt, 18).exec();
+```
+
+### JOIN
+
+```js
+await orders
+  .select([usersCols.name, o.amount])
+  .join("users", o.userId, usersCols.id, k.inner)
+  .exec();
+```
+
+### GROUP BY & HAVING
+
+```js
+await orders
+  .groupBy([usersCols.name])
+  .aggregate({ total: db.fn.sum(o.amount) })
+  .having("total", k.gt, 25)
+  .exec();
+```
+
+---
+
+## 7. SQL Parser: Syntax & Features
+
+### SELECT
+
+```sql
+SELECT [TOP n] field_list | * FROM table
+  [LEFT|RIGHT|INNER JOIN table2 ON field1 = field2]...
+  [WHERE conditions]
+  [GROUP BY field1, field2]
+  [HAVING conditions]
+  [ORDER BY field [ASC|DESC]]
+  [LIMIT n]
+  [OFFSET n | SKIP n]
+```
+
+**Features:**
+
+- Wildcard: `SELECT *`
+- Aliasing: `SELECT field AS alias`
+- Aggregates: `COUNT(*)`, `SUM(field)`, etc.
+- Scalar functions: `UPPER(name)`, `ROUND(price, 2)`, etc.
+- Inline math: `price * 0.9`, `age + 1`
+- Auto GROUP BY: If SELECT has both plain fields and aggregates, plain fields become group key
+- Independent SELECT: `SELECT 1+2`, `SELECT UPPER('hi')` (no FROM)
+
+### INSERT
+
+```sql
+INSERT INTO table (col1, col2) VALUES (v1, v2), (v3, v4)
+INSERT INTO table SET col1 = v1, col2 = v2
+```
+
+- Supports multiple rows, nested JSON, arrays, function expressions
+
+### UPDATE
+
+```sql
+UPDATE table SET col1 = v1, col2 = v2 [WHERE ...]
+```
+
+- SET values can be functions, math, JSON
+
+### DELETE
+
+```sql
+DELETE FROM table WHERE ...
+```
+
+- **DELETE without WHERE is blocked** (use TRUNCATE)
+
+### DDL
+
+```sql
+SHOW TABLES
+SHOW COLUMNS FROM table
+DESCRIBE table
+CREATE TABLE [IF NOT EXISTS] name (col defs)
+DROP TABLE [IF EXISTS] name
+TRUNCATE [TABLE] name
+```
+
+### Multi-Query
+
+```js
+const results = await db.sqlMulti(
+  "INSERT INTO products (name, price) VALUES ('Widget', 10); SELECT * FROM products",
+);
+// [{ query, rows, error }, ...]
+```
+
+### Comments
+
+- Single-line: `-- comment`
+- Multi-line: `/* comment */`
+- Comments inside strings are preserved
+
+---
+
+## 8. Supported Functions
+
+### Aggregate Functions
+
+| Name  | Usage         | Notes                      |
+| ----- | ------------- | -------------------------- |
+| count | count(field?) | `count(*)` counts all rows |
+| sum   | sum(field)    |                            |
+| avg   | avg(field)    |                            |
+| min   | min(field)    |                            |
+| max   | max(field)    |                            |
+
+### Math Functions
+
+| Name  | Aliases  | Usage             | Notes                    |
+| ----- | -------- | ----------------- | ------------------------ |
+| add   |          | add(a, b)         | `a + b`                  |
+| sub   | subtract | sub(a, b)         | `a - b`                  |
+| mul   | multiply | mul(a, b)         | `a * b`                  |
+| div   | divide   | div(a, b)         | `a / b` (throws on zero) |
+| mod   | modulo   | mod(a, b)         | `a % b` (throws on zero) |
+| pow   |          | pow(a, b)         | `a ** b`                 |
+| abs   |          | abs(a)            |                          |
+| ceil  |          | ceil(a)           |                          |
+| floor |          | floor(a)          |                          |
+| round |          | round(a, digits?) | digits default 0         |
+| sqrt  |          | sqrt(a)           | throws on negative       |
+
+### String Functions
+
+| Name        | Aliases   | Usage                       | Notes                        |
+| ----------- | --------- | --------------------------- | ---------------------------- |
+| concat      |           | concat(a, b, ...)           |                              |
+| trim        |           | trim(a)                     |                              |
+| trimStart   | trimLeft  | trimStart(a)                |                              |
+| trimEnd     | trimRight | trimEnd(a)                  |                              |
+| slice       |           | slice(a, start, end)        |                              |
+| substring   |           | substring(a, start, end)    |                              |
+| substr      |           | substr(a, start, length)    |                              |
+| toUpperCase |           | toUpperCase(a)              |                              |
+| toLowerCase |           | toLowerCase(a)              |                              |
+| replace     |           | replace(a, search, repl)    |                              |
+| replaceAll  |           | replaceAll(a, search, repl) | regex, throws on bad pattern |
+| split       |           | split(a, sep)               |                              |
+| startsWith  |           | startsWith(a, prefix)       |                              |
+| endsWith    |           | endsWith(a, suffix)         |                              |
+| includes    |           | includes(a, substr)         |                              |
+| indexOf     |           | indexOf(a, search)          |                              |
+| length      |           | length(a)                   |                              |
+
+---
+
+## 9. Nested JSON & Arrays
+
+### Dot Notation & Arrow Operators
+
+- Access nested fields: `user.profile.name`, `specs.storage.size`
+- PostgreSQL-style: `specs->'cpu'`, `specs->>'ram'` (converted to dot notation)
+
+### Array Access
+
+- `tags[0]` or `tags.0`
+- `items[0].name` or `items.0.name`
+
+### Examples
+
+```js
+await products
+  .select(["name", "specs.cpu"])
+  .where("specs.ram", k.like, "%GB")
+  .exec();
+await db
+  .sql("select name, tags[0] from products where tags[0] = 'electronics'")
+  .exec();
+await db.sql("select items[0].name from orders").exec();
+```
+
+---
+
+## 10. Transactions
+
+ACID transactions across multiple tables:
+
+```js
+await db.transaction(["users", "orders"], "readwrite", async (tx) => {
+  await tx.table("users").insert({ name: "Nora" }).exec();
+  await tx.table("orders").insert({ userId: 1, amount: 42 }).exec();
+});
+```
+
+All operations in the callback share a single IndexedDB transaction. Use `tx.table(name)`, `tx.sql(query)`, `tx.sqlMulti(query)`, `tx.cols(tableName)`.
+
+---
+
+## 11. Dummy Data Seeding
+
+Seed tables with realistic data from [dummyjson.com](https://dummyjson.com):
+
+```js
+await db.populateDummy({
+  users: { mode: "replace", limit: 50 },
+  products: true,
+  carts: { limit: 20 },
+});
+// { users: 50, products: 30, carts: 20 }
+```
+
+**Resources:** products, carts, users, posts, comments, quotes, todos
+
+**Options:**
+
+- `baseUrl`, `resources`, `mode`, `limit`, `skip`, `all`, `skipMissing`, `tableMap`, `fetch`
+- Per-resource config supported
+
+---
+
+## 12. Error Handling & Edge Cases
+
+### Error Types
+
+| Error                                           | Condition                          |
+| ----------------------------------------------- | ---------------------------------- |
+| "Schema object is required"                     | No schema passed                   |
+| "Unknown table: X"                              | Table not in schema                |
+| "select(fields) expects an array"               | Non-array argument                 |
+| "where(field, op, value) requires a field name" | Falsy field                        |
+| "Division by zero"                              | Math div/mod by zero               |
+| "Invalid argument for SQRT: negative value"     | SQRT of negative                   |
+| "REPLACE: invalid pattern"                      | Bad regex in replaceAll            |
+| "DELETE without WHERE would remove all rows..." | DELETE without WHERE               |
+| "Duplicate key: ..."                            | IndexedDB ConstraintError          |
+| "Table X already exists"                        | CREATE TABLE without IF NOT EXISTS |
+| "INSERT requires at least one row"              | Empty INSERT                       |
+| "UPDATE requires at least one SET assignment"   | Empty UPDATE                       |
+| "Unknown function: X"                           | Unrecognized function              |
+| "Unsupported SQL command: X"                    | Unrecognized command               |
+| "Invalid SELECT syntax"                         | SELECT without FROM                |
+| "DummyJSON request failed: X"                   | Dummy data fetch error             |
+| ...and more                                     |
+
+### Null Propagation
+
+- Math functions return null if any operand is null/undefined/NaN
+- String functions: null/undefined → "" or default (see function table)
+
+### Safety
+
+- DELETE without WHERE is blocked (use TRUNCATE)
+- All DDL commands are transactional (schema changes are atomic)
+
+---
+
+## 13. Reference: All Keywords, Operators, and Functions
+
+### Keywords
+
+See [Column References & Keywords](#column-references--keywords)
+
+### WHERE Operators
+
+| SQL         | API     | Meaning          |
+| ----------- | ------- | ---------------- |
+| =           | eq      | Equal            |
+| !=          | ne      | Not equal        |
+| <>          | ne      | Not equal        |
+| >           | gt      | Greater than     |
+| >=          | gte     | Greater or equal |
+| <           | lt      | Less than        |
+| <=          | lte     | Less or equal    |
+| IN          | in      | In list          |
+| BETWEEN     | between | Range            |
+| LIKE        | like    | Pattern match    |
+| IS NULL     | is      | Null check       |
+| IS NOT NULL | isNot   | Not null         |
+
+### Logical
+
+- AND, OR, NOT, parentheses supported
+
+### Join Types
+
+- INNER, LEFT, RIGHT
+
+### DDL
+
+- SHOW TABLES, SHOW COLUMNS, DESCRIBE, CREATE TABLE, DROP TABLE, TRUNCATE
+
+### Functions
+
+- See [Supported Functions](#supported-functions)
+
+---
+
+## 14. Advanced Usage & Notes
+
+### Wildcard SELECT
+
+- `SELECT *` or `table.select(null)` returns full row objects
+
+### Aliasing
+
+- `SELECT field AS alias` or function/aggregate AS alias
+
+### Inline Math
+
+- `SELECT price * 0.9 AS discounted FROM products`
+
+### Function Expressions in INSERT/UPDATE
+
+- `INSERT INTO users (name) VALUES (UPPER('alice'))`
+- `UPDATE users SET age = age + 1 WHERE ...`
+
+### Multi-Query
+
+- `db.sqlMulti("...; ...")` returns array of results/errors
+
+### Comments
+
+- `-- comment` and `/* comment */` supported
+
+### Transactions
+
+- All table/sql operations in a transaction share the same IndexedDB tx
+
+### Dummy Data
+
+- `populateDummy` fetches all data before opening tx (avoids timeout)
+
+### Schema Reconstruction
+
+- On open, schema is reconstructed from existing stores if not provided
+
+### Limitations
+
+- No DISTINCT or subquery support
+- No ALTER TABLE
+
+---
+
+## 15. Full Example: End-to-End
+
+```js
+import { IndexQL } from "./indexql.js";
+
+// Open DB with empty schema
+const db = await IndexQL.open("demo", { tables: {} });
+
+// Create table via SQL
+await db.sql("CREATE TABLE users (id PRIMARY KEY, name, age, email)").exec();
+
+// Insert data
+await db
+  .sql(
+    "INSERT INTO users (name, age, email) VALUES ('Alice', 30, 'alice@test'), ('Bob', 25, 'bob@test')",
+  )
+  .exec();
+
+// Query with math, string, and aggregate functions
+const rows = await db
+  .sql(
+    `
+  SELECT UPPER(name) AS uname, age + 1 AS nextAge, COUNT(*) AS total
+  FROM users
+  WHERE age >= 25
+  GROUP BY name, age
+  ORDER BY age DESC
+`,
+  )
+  .exec();
+
+// Transaction
+await db.transaction(["users"], "readwrite", async (tx) => {
+  await tx
+    .table("users")
+    .update({ active: true })
+    .where("age", db.k.gte, 18)
+    .exec();
+});
+
+// Seed dummy data
+await db.populateDummy({ users: { limit: 10 } });
+
+// Clean up
+await db.close();
+```
 
 - Direction: `asc`, `desc`
 - Join types: `inner`, `left`, `right`
@@ -238,26 +760,56 @@ const rows = await db
 
 ```js
 // Single row
-await db.sql("INSERT INTO users (name, email, age) VALUES ('Alice', 'alice@test', 30)").exec();
+await db
+  .sql(
+    "INSERT INTO users (name, email, age) VALUES ('Alice', 'alice@test', 30)",
+  )
+  .exec();
 
 // Multiple rows
-await db.sql("INSERT INTO products (name, price) VALUES ('Laptop', 1200), ('Phone', 800)").exec();
+await db
+  .sql(
+    "INSERT INTO products (name, price) VALUES ('Laptop', 1200), ('Phone', 800)",
+  )
+  .exec();
 
 // SET syntax
-await db.sql("INSERT INTO users SET name = 'Bob', email = 'bob@test', age = 25").exec();
+await db
+  .sql("INSERT INTO users SET name = 'Bob', email = 'bob@test', age = 25")
+  .exec();
 
 // Nested JSON objects and arrays
-await db.sql("INSERT INTO products (name, meta) VALUES ('Widget', {'color': 'red', 'weight': 150})").exec();
-await db.sql("INSERT INTO products (name, tags) VALUES ('Gadget', ['electronics', 'sale'])").exec();
+await db
+  .sql(
+    "INSERT INTO products (name, meta) VALUES ('Widget', {'color': 'red', 'weight': 150})",
+  )
+  .exec();
+await db
+  .sql(
+    "INSERT INTO products (name, tags) VALUES ('Gadget', ['electronics', 'sale'])",
+  )
+  .exec();
 
 // Deeply nested structures
-await db.sql("INSERT INTO products (name, details) VALUES ('Phone', {'specs': {'ram': 8}, 'colors': ['black', 'white']})").exec();
+await db
+  .sql(
+    "INSERT INTO products (name, details) VALUES ('Phone', {'specs': {'ram': 8}, 'colors': ['black', 'white']})",
+  )
+  .exec();
 
 // Array of objects
-await db.sql("INSERT INTO products (name, variants) VALUES ('Shirt', [{'size': 'S', 'stock': 10}, {'size': 'M', 'stock': 20}])").exec();
+await db
+  .sql(
+    "INSERT INTO products (name, variants) VALUES ('Shirt', [{'size': 'S', 'stock': 10}, {'size': 'M', 'stock': 20}])",
+  )
+  .exec();
 
 // SET syntax with nested JSON
-await db.sql("INSERT INTO products SET name = 'Laptop', specs = {'cpu': 'i7', 'ram': 16}").exec();
+await db
+  .sql(
+    "INSERT INTO products SET name = 'Laptop', specs = {'cpu': 'i7', 'ram': 16}",
+  )
+  .exec();
 ```
 
 ### UPDATE
@@ -270,7 +822,9 @@ await db.sql("UPDATE users SET age = 31 WHERE name = 'Alice'").exec();
 await db.sql("UPDATE users SET active = false").exec();
 
 // Update multiple columns
-await db.sql("UPDATE users SET name = 'Alicia', age = 31 WHERE email = 'alice@test'").exec();
+await db
+  .sql("UPDATE users SET name = 'Alicia', age = 31 WHERE email = 'alice@test'")
+  .exec();
 ```
 
 ### DELETE
@@ -315,7 +869,7 @@ Run multiple statements separated by `;` or newlines:
 
 ```js
 const results = await db.sqlMulti(
-  "INSERT INTO products (name, price) VALUES ('Widget', 10); SELECT * FROM products"
+  "INSERT INTO products (name, price) VALUES ('Widget', 10); SELECT * FROM products",
 );
 // results = [{ query, rows, error }, { query, rows, error }]
 ```
