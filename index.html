@@ -184,6 +184,10 @@
         color: #3f3f46 !important;
       }
 
+      .cm-s-material span.cm-builtin {
+        color: #c792ea !important;
+      }
+
       .controls {
         padding: 10px 16px;
         border-top: 1px solid #27272a;
@@ -620,7 +624,7 @@
             </div>
             <div class="empty-state">
               <div class="icon">&#x276F;</div>
-              <div>Run a query to see results</div>
+              <div>Seed a table or run a query to get started</div>
             </div>
           </div>
           <div id="status" class="status-bar">
@@ -657,50 +661,12 @@
           "UPDATE users SET email = 'updated@test' WHERE id = 1;\nSELECT * FROM users WHERE id = 1",
         delete:
           "DELETE FROM products WHERE price < 10;\nSELECT * FROM products",
-        ddl: "SHOW TABLES;\nDESCRIBE users;\nCREATE TABLE tasks (id PRIMARY KEY, title, done);\nSHOW TABLES",
+        ddl: "SHOW TABLES;\nCREATE TABLE tasks (id PRIMARY KEY, title, done);\nSHOW TABLES;\nDESCRIBE tasks",
       };
 
       async function initDb() {
-        const schema = {
-          tables: {
-            users: {
-              keyPath: "id",
-              autoIncrement: true,
-              indexes: { email: {}, username: {} },
-            },
-            products: {
-              keyPath: "id",
-              autoIncrement: true,
-              indexes: { category: {} },
-            },
-            posts: {
-              keyPath: "id",
-              autoIncrement: true,
-              indexes: { userId: {} },
-            },
-            todos: {
-              keyPath: "id",
-              autoIncrement: true,
-              indexes: { userId: {} },
-            },
-          },
-        };
-
         try {
-          // Probe the current DB version so we can force an upgrade
-          const currentVersion = await new Promise((res, rej) => {
-            const probe = indexedDB.open("playground");
-            probe.onsuccess = () => {
-              const v = probe.result.version;
-              probe.result.close();
-              res(v);
-            };
-            probe.onerror = () => res(1);
-          });
-          // Always open with currentVersion + 1 to trigger onupgradeneeded
-          // which will recreate stores if keyPath/autoIncrement changed
-          schema.version = currentVersion + 1;
-          db = await IndexQL.open("playground", schema);
+          db = await IndexQL.open("playground", { tables: {} });
           updateStatus("Connected");
           updateSeedInfo("");
         } catch (err) {
@@ -711,8 +677,7 @@
               req.onsuccess = () => res();
               req.onerror = () => rej(req.error);
             });
-            schema.version = 1;
-            db = await IndexQL.open("playground", schema);
+            db = await IndexQL.open("playground", { tables: {} });
             updateStatus("Connected (reset)");
             updateSeedInfo("");
           } catch (retryErr) {
@@ -1012,6 +977,12 @@
 
         try {
           updateStatus("Seeding...");
+
+          // Auto-create the table if it doesn't exist
+          if (!db._schema.tables[table]) {
+            await db.sql("CREATE TABLE IF NOT EXISTS " + table + " (id PRIMARY KEY)").exec();
+          }
+
           const resource = resourceMap[table];
           const seeded = await db.populateDummy({
             resources: [resource],
@@ -1047,6 +1018,12 @@
           const table = document.getElementById("dbSelect").value;
           try {
             updateStatus("Counting...");
+            if (!db._schema.tables[table]) {
+              clearOutput();
+              appendOutput("Table " + table + " does not exist. Seed it first.", true);
+              updateStatus("No table");
+              return;
+            }
             const result = await db.table(table).select(null).exec();
             clearOutput();
             appendOutput(result.length + " rows in " + table, false);
@@ -1058,9 +1035,56 @@
         });
 
       window.addEventListener("load", () => {
+        // CodeMirror SQL mode expects keyword maps as {word: true} objects
+        const toMap = (arr) => {
+          const m = {};
+          arr.forEach((w) => { m[w] = true; });
+          return m;
+        };
+
+        const indexqlKeywords = toMap([
+          // DQL
+          "select", "from", "where", "as",
+          // Joins
+          "join", "inner", "left", "right", "on",
+          // Clauses
+          "group", "by", "having", "order", "limit", "offset", "top", "skip", "asc", "desc",
+          // DML
+          "insert", "into", "values", "set", "update", "delete",
+          // DDL
+          "create", "drop", "truncate", "table", "show", "tables", "describe",
+          "columns", "primary", "key", "unique", "if", "not", "exists",
+          // Column types
+          "varchar", "text", "char", "int", "integer", "boolean",
+          // Logical / comparison
+          "and", "or", "in", "between", "like", "is", "null", "true", "false",
+          // Other
+          "autoincrement",
+        ]);
+
+        const indexqlBuiltins = toMap([
+          // Math functions
+          "abs", "ceil", "ceiling", "floor", "round", "sqrt", "pow", "power", "mod",
+          "add", "sub", "subtract", "mul", "multiply", "div", "divide", "modulo",
+          // String functions
+          "upper", "lower", "trim", "ltrim", "rtrim", "length", "len",
+          "concat", "substring", "substr", "replace", "replaceall", "replace_all",
+          "slice", "split", "reverse", "indexof", "index_of",
+          "starts_with", "startswith", "ends_with", "endswith", "includes", "contains",
+          "trim_start", "trim_end",
+          // Aggregates
+          "count", "sum", "avg", "min", "max",
+          // Others
+          "coalesce", "ifnull", "nullif", "cast",
+        ]);
+
         editor = CodeMirror.fromTextArea(document.getElementById("sqlInput"), {
           lineNumbers: true,
-          mode: "text/x-sql",
+          mode: {
+            name: "text/x-sql",
+            keywords: indexqlKeywords,
+            builtin: indexqlBuiltins,
+          },
           theme: "material",
           indentUnit: 2,
           lineWrapping: true,

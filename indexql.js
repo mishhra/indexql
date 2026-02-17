@@ -16,9 +16,10 @@ class IndexQL {
   }
 
   static async open(name, schema) {
-    if (!schema || !schema.tables) {
-      throw new Error("Schema must include tables");
+    if (!schema) {
+      throw new Error("Schema object is required");
     }
+    if (!schema.tables) schema.tables = {};
 
     const db = await openDatabase(name, schema);
     return new IndexQL(db, schema);
@@ -373,8 +374,8 @@ class QueryBuilder {
 
 async function openDatabase(name, schema) {
   return new Promise((resolve, reject) => {
-    const version = schema.version || 1;
-    const req = indexedDB.open(name, version);
+    const version = schema.version || undefined;
+    const req = version ? indexedDB.open(name, version) : indexedDB.open(name);
     req.onupgradeneeded = (event) => {
       const db = event.target.result;
       const existingStores = Array.from(db.objectStoreNames);
@@ -422,7 +423,50 @@ async function openDatabase(name, schema) {
     };
 
     req.onerror = () => reject(req.error);
-    req.onsuccess = () => resolve(req.result);
+    req.onsuccess = () => {
+      // Reconstruct schema from existing stores so engine knows all tables
+      const idb = req.result;
+      const storeNames = Array.from(idb.objectStoreNames);
+      for (const storeName of storeNames) {
+        if (!schema.tables[storeName]) {
+          // Store exists in DB but not in schema — add it
+          schema.tables[storeName] = {
+            keyPath: "id",
+            autoIncrement: true,
+            indexes: {},
+          };
+        }
+      }
+      // If we can inspect the actual store properties, do so
+      if (storeNames.length > 0) {
+        try {
+          const tx = idb.transaction(storeNames, "readonly");
+          for (const storeName of storeNames) {
+            const store = tx.objectStore(storeName);
+            const def = schema.tables[storeName];
+            def.keyPath = store.keyPath || "id";
+            def.autoIncrement = store.autoIncrement;
+            // Reconstruct indexes
+            if (!def.indexes) def.indexes = {};
+            for (const idxName of store.indexNames) {
+              if (!def.indexes[idxName]) {
+                const idx = store.index(idxName);
+                def.indexes[idxName] = {
+                  keyPath: idx.keyPath,
+                  unique: idx.unique,
+                  multiEntry: idx.multiEntry,
+                };
+              }
+            }
+          }
+          tx.abort(); // Read-only inspection, abort to avoid waiting
+        } catch (_) {
+          // Inspection failed, use defaults
+        }
+      }
+      schema.version = idb.version;
+      resolve(idb);
+    };
   });
 }
 
