@@ -393,7 +393,19 @@ async function openDatabase(name, schema) {
             autoIncrement: !!tableDef.autoIncrement,
           });
         } else {
-          store = req.transaction.objectStore(tableName);
+          // Check if store options changed (keyPath or autoIncrement) — must recreate
+          const existing = req.transaction.objectStore(tableName);
+          const wantKey = tableDef.keyPath || "id";
+          const wantAuto = !!tableDef.autoIncrement;
+          if (existing.keyPath !== wantKey || existing.autoIncrement !== wantAuto) {
+            db.deleteObjectStore(tableName);
+            store = db.createObjectStore(tableName, {
+              keyPath: wantKey,
+              autoIncrement: wantAuto,
+            });
+          } else {
+            store = existing;
+          }
         }
 
         const indexDefs = tableDef.indexes || {};

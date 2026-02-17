@@ -665,45 +665,58 @@
           tables: {
             users: {
               keyPath: "id",
+              autoIncrement: true,
               indexes: { email: {}, username: {} },
             },
             products: {
               keyPath: "id",
+              autoIncrement: true,
               indexes: { category: {} },
             },
             posts: {
               keyPath: "id",
+              autoIncrement: true,
               indexes: { userId: {} },
             },
             todos: {
               keyPath: "id",
+              autoIncrement: true,
               indexes: { userId: {} },
             },
           },
         };
 
         try {
+          // Probe the current DB version so we can force an upgrade
+          const currentVersion = await new Promise((res, rej) => {
+            const probe = indexedDB.open("playground");
+            probe.onsuccess = () => {
+              const v = probe.result.version;
+              probe.result.close();
+              res(v);
+            };
+            probe.onerror = () => res(1);
+          });
+          // Always open with currentVersion + 1 to trigger onupgradeneeded
+          // which will recreate stores if keyPath/autoIncrement changed
+          schema.version = currentVersion + 1;
           db = await IndexQL.open("playground", schema);
           updateStatus("Connected");
           updateSeedInfo("");
         } catch (err) {
-          // Version conflict from previous DDL commands — delete and retry
-          if (err.name === "VersionError") {
-            try {
-              await new Promise((res, rej) => {
-                const req = indexedDB.deleteDatabase("playground");
-                req.onsuccess = () => res();
-                req.onerror = () => rej(req.error);
-              });
-              db = await IndexQL.open("playground", schema);
-              updateStatus("Connected (reset)");
-              updateSeedInfo("");
-            } catch (retryErr) {
-              appendOutput("Failed to initialize: " + retryErr.message, true);
-              updateStatus("Error");
-            }
-          } else {
-            appendOutput("Failed to initialize: " + err.message, true);
+          // Fallback: delete the DB entirely and start fresh
+          try {
+            await new Promise((res, rej) => {
+              const req = indexedDB.deleteDatabase("playground");
+              req.onsuccess = () => res();
+              req.onerror = () => rej(req.error);
+            });
+            schema.version = 1;
+            db = await IndexQL.open("playground", schema);
+            updateStatus("Connected (reset)");
+            updateSeedInfo("");
+          } catch (retryErr) {
+            appendOutput("Failed to initialize: " + retryErr.message, true);
             updateStatus("Error");
           }
         }
