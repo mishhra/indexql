@@ -682,9 +682,31 @@
           },
         };
 
-        db = await IndexQL.open("playground", schema);
-        updateStatus("Connected");
-        updateSeedInfo("");
+        try {
+          db = await IndexQL.open("playground", schema);
+          updateStatus("Connected");
+          updateSeedInfo("");
+        } catch (err) {
+          // Version conflict from previous DDL commands — delete and retry
+          if (err.name === "VersionError") {
+            try {
+              await new Promise((res, rej) => {
+                const req = indexedDB.deleteDatabase("playground");
+                req.onsuccess = () => res();
+                req.onerror = () => rej(req.error);
+              });
+              db = await IndexQL.open("playground", schema);
+              updateStatus("Connected (reset)");
+              updateSeedInfo("");
+            } catch (retryErr) {
+              appendOutput("Failed to initialize: " + retryErr.message, true);
+              updateStatus("Error");
+            }
+          } else {
+            appendOutput("Failed to initialize: " + err.message, true);
+            updateStatus("Error");
+          }
+        }
       }
 
       function updateStatus(msg) {
